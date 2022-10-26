@@ -1,0 +1,39 @@
+{
+  "name": "enzo.js",
+  "type": "module",
+  "version": "x.x.x",
+  "description": "enzo-ws js SDK",
+  "main": "./index.mjs",
+  "module": "./index.mjs",
+  "unpkg": "./index.js",
+  "jsdelivr": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.mjs"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "*": [
+        "./*",
+        "./index.d.ts"
+      ]
+    }
+  },
+  "keywords": [
+    "enzo-ws",
+    "sdk"
+  ],
+  "author": "cuipeiyu <xiaocui1023@vip.qq.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cuipeiyu/enzo-ws.git"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "eventemitter3": "^4.0.7",
+    "nanoid": "^4.0.0"
+  }
+}

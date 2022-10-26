@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "UMD",
+    "allowJs": true,
+    "jsx": "preserve",
+    "declaration": true,
+    "declarationDir": "./dist",
+    "sourceMap": false,
+    "esModuleInterop": true,
+    "outDir": "./dist",
+    "rootDirs": ["./src", "./test"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+    "lib": [
+      "esnext",
+      "dom"
+    ],
+    // Type check
+    "strict": true,
+    "skipLibCheck": true,
+    "noImplicitAny": true,
+    "removeComments": false,
+    "noUnusedLocals": true,
+    "strictBindCallApply": true,
+    "strictFunctionTypes": true,
+    "strictPropertyInitialization": false,
+    "suppressImplicitAnyIndexErrors": true,
+    "strictNullChecks": true
+  },
+  "include": ["src/*.ts", "src/**/*.ts", "src/**/*.d.ts"],
+  "exclude": ["node_modules", "types", "*.bak", "**/*.bak", "**/*.bak/**/*"]
+}
