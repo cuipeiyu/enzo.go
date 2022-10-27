@@ -5,8 +5,8 @@
   "description": "a enzo.go js SDK",
   "main": "./index.mjs",
   "module": "./index.mjs",
-  "unpkg": "./index.js",
-  "jsdelivr": "./index.js",
+  "unpkg": "./index.min.js",
+  "jsdelivr": "./index.min.js",
   "types": "./index.d.ts",
   "exports": {
     ".": {
@@ -23,7 +23,8 @@
     }
   },
   "keywords": [
-    "enzo-ws",
+    "enzo.js",
+    "enzo.go",
     "sdk"
   ],
   "author": "cuipeiyu <xiaocui1023@vip.qq.com>",
@@ -34,6 +35,7 @@
   "license": "MIT",
   "dependencies": {
     "eventemitter3": "^4.0.7",
+    "minimatch": "^5.1.0",
     "nanoid": "^4.0.0"
   }
 }
