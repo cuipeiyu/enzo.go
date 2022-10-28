@@ -1,4 +1,5 @@
 import EventEmitter from 'eventemitter3';
+import { nanoid } from 'nanoid';
 
 export declare interface EnzoOption {
   /** server address e.g: ws://localhost */
@@ -11,7 +12,7 @@ export declare interface Payload {
 
 export type Handle = (p: Payload) => void | Promise<void>;
 
-export class Enzo {
+export default class Enzo {
   private opt: EnzoOption;
 
   private ee: EventEmitter;
@@ -27,6 +28,7 @@ export class Enzo {
 
   constructor(opt: EnzoOption) {
     // this.events = {};
+    console.log(nanoid());
 
     this.opt = opt;
 

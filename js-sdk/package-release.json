@@ -3,15 +3,15 @@
   "type": "module",
   "version": "x.x.x",
   "description": "a enzo.go js SDK",
-  "main": "./index.mjs",
-  "module": "./index.mjs",
-  "unpkg": "./index.min.js",
-  "jsdelivr": "./index.min.js",
+  "main": "./index.es.js",
+  "module": "./index.es.ts",
+  "unpkg": "./index.umd.js",
+  "jsdelivr": "./index.umd.js",
   "types": "./index.d.ts",
   "exports": {
     ".": {
       "types": "./index.d.ts",
-      "import": "./index.mjs"
+      "import": "./index.es.js"
     }
   },
   "typesVersions": {
