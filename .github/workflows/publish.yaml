@@ -1,0 +1,34 @@
+name: Publish Package to npmjs
+on:
+  push:
+    tags:
+    - 'v*'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      # Setup .npmrc file to publish to npm
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '16.x'
+          registry-url: 'https://registry.npmjs.org'
+
+      # ${{steps.tag.outputs.tag}}
+      - uses: dawidd6/action-get-tag@v1
+        id: tag
+
+      - name: Build
+        working-directory: ./js-sdk
+        run: |
+          yarn
+          yarn build
+
+      - name: Publish
+        working-directory: ./js-sdk/dist
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          sed -i 's/x.x.x/'$(echo '${{steps.tag.outputs.tag}}'|cut -d'v' -f 2)'/g' package.json
+          yarn publish
