@@ -10,6 +10,15 @@ export declare interface Payload {
   id: string;
 }
 
+// export declare interface Response {
+// }
+
+interface internalResponse {
+  msgid: string;
+  status: number;
+  data?: any;
+}
+
 export type Handle = (p: Payload) => void | Promise<void>;
 
 export default class Enzo {
@@ -47,6 +56,30 @@ export default class Enzo {
     this.ee.removeAllListeners();
   }
 
+  public emit(key: string, data: any, cb?: (res: any) => void): Promise<any> {
+    const _this = this;
+    const msgid = nanoid();
+    return new Promise((resolve, reject) => {
+      _this.socket.send(JSON.stringify({
+        msgid,
+        key,
+        data,
+      }));
+
+      // waiting back
+      _this.ee.once(msgid + '_response', (res: internalResponse) => {
+        if (cb) cb(res.data);
+        if (res.status === 1) {
+          resolve(res.data);
+        }
+      });
+      setTimeout(() => {
+        _this.ee.removeListener(msgid + '_response');
+        reject(new Error('Timeout'));
+      }, 5000);
+    });
+  }
+
   private inited: boolean;
 
   public connect() {
@@ -55,12 +88,14 @@ export default class Enzo {
       if (_this.inited) return resolve(_this);
 
       _this.socket = new WebSocket(_this.opt.address);
+      // _this.socket.binaryType = 'arraybuffer';
       _this.socket.addEventListener('open', _this.onopen);
       _this.socket.addEventListener('message', _this.onmessage);
       _this.socket.addEventListener('error', _this.onerror);
       _this.socket.addEventListener('close', _this.onclose);
       _this.socket.onopen = function () {
         resolve(_this);
+        _this.socket.send('hi');
       };
       _this.socket.onerror = function (e) {
         console.log('WebSocket error: ', e);
@@ -84,6 +119,9 @@ export default class Enzo {
     console.log('onmessage', e);
 
     this.connected = true;
+
+    // var raw = new Uint8Array(e.data);
+    // var message = msgpack.decode(raw);
   }
 
   private onerror(e: Event) {

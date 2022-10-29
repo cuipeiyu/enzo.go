@@ -10,7 +10,12 @@
 <body>
 
   <script>
-    new enzo()
+    !(async () => {
+      const ez = new enzo({
+        address: 'ws://localhost:90/ws'
+      });
+      await ez.connect()
+    })();
   </script>
 </body>
 </html>
