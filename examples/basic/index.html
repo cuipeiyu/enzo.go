@@ -11,10 +11,28 @@
 
   <script>
     !(async () => {
-      const ez = new enzo({
+      window.ez = new Enzo({
         address: 'ws://localhost:90/ws'
       });
-      await ez.connect()
+
+      window.ez.on('message', () => {
+        console.log('on get message');
+      })
+
+      // window.ez.on('boom', (e) => {
+      //   console.log('on get boom', e.payload);
+
+      //   e.write('haha')
+      // })
+
+      setInterval(() => {
+        console.log('post test message')
+        window.ez.emit('test', JSON.stringify({ hello: 'world' }), (data) => {
+          console.log('on test back', data)
+        })
+      }, 4000)
+
+      await window.ez.connect()
     })();
   </script>
 </body>
