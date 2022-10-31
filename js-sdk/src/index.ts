@@ -35,8 +35,7 @@ export default class Enzo {
 
   #socket: WebSocket;
 
-  // private events: Record<string, Handle>;
-  #eventTimers: Record<string, number>;
+  #timers: Record<string, number>;
 
   #heartbeatTimer: number;
 
@@ -46,7 +45,7 @@ export default class Enzo {
 
     this.#opt = opt;
 
-    this.#eventTimers = {};
+    this.#timers = {};
 
     this.#ee = new EventEmitter();
     this.offAll();
@@ -78,7 +77,7 @@ export default class Enzo {
       type === messageType.PingMessage
       || type === messageType.PongMessage
     ) {
-      this.#socket.send(mergeBuffer(new Uint8Array([type, 0, 0, 0, 0])));
+      this.#socket.send(new Uint8Array([type, 0, 0, 0, 0]));
       return;
     }
 
@@ -160,31 +159,32 @@ export default class Enzo {
     let back = false;
 
     // set timer
-    this.#eventTimers[msgid] = window.setTimeout(() => {
+    this.#timers[msgid] = window.setTimeout(() => {
       // remove listener
       this.#ee.removeListener(msgid);
 
+      // remove timer
+      if (msgid in this.#timers) {
+        clearTimeout(this.#timers[msgid]);
+        delete this.#timers[msgid];
+      }
+
       // return an error
-      if (!back && callback) callback(new Error('Timeout'));
+      if (!back) callback(new Error('Timeout'));
     }, 5000);
 
     // waiting back
     this.#ee.once(msgid, (res: payload) => {
       back = true;
 
-      // remove listener
-      this.#ee.removeListener(msgid);
-
       // remove timer
-      if (msgid in this.#eventTimers) {
-        console.log('clear event timer', msgid);
-
-        clearTimeout(this.#eventTimers[msgid]);
-        delete this.#eventTimers[msgid];
+      if (msgid in this.#timers) {
+        clearTimeout(this.#timers[msgid]);
+        delete this.#timers[msgid];
       }
 
       // success
-      if (callback) callback(new Context(this, res.data));
+      callback(new Context(this, res));
     });
   }
 
@@ -215,34 +215,34 @@ export default class Enzo {
     return new Promise((resolve, reject) => {
       if (_this.#inited) return resolve(_this);
 
-      _this.#socket = new WebSocket(_this.#opt.address);
+      _this.#socket = new WebSocket(_this.#opt.address, ['enzo-v0']);
       _this.#socket.binaryType = 'arraybuffer';
       // _this.#socket.addEventListener('open', _this.#onopen);
       // _this.#socket.addEventListener('message', _this.#onmessage);
       // _this.#socket.addEventListener('error', _this.#onerror);
       // _this.#socket.addEventListener('close', _this.#onclose);
       _this.#socket.onopen = function (e: Event) {
-        console.log('WebSocket onopen', e);
+        // console.log('WebSocket onopen', e);
         resolve(_this);
 
         _this.#ee.emit('ws_open', e);
       };
 
       _this.#socket.onerror = function (e: Event) {
-        console.log('WebSocket error: ', e);
+        // console.log('WebSocket error: ', e);
         reject(e);
 
         _this.#ee.emit('ws_error', e);
       };
 
       _this.#socket.onclose = function (e: Event) {
-        console.log('WebSocket close: ', e);
+        // console.log('WebSocket close: ', e);
 
         _this.#ee.emit('ws_close', e);
       };
 
       _this.#socket.onmessage = function (e: MessageEvent) {
-        console.log('WebSocket onmessage', e);
+        // console.log('WebSocket onmessage', e);
 
         _this.#ee.emit('ws_message', e);
       };
@@ -274,11 +274,14 @@ export default class Enzo {
     this.#setConnected(true, true);
   }
 
-  #wsmessage(e: MessageEvent<Uint8Array>) {
+  #wsmessage(e: MessageEvent<ArrayBuffer>) {
     this.#setConnected(true);
     this.#resetHeartbeatTimer();
 
-    const mt = Number(e.data.slice(0, 1));
+    const _mt = e.data.slice(0, 1);
+    const view = new Uint8Array(_mt);
+    const mt = view.at(0);
+
     if (!mt || !(mt in messageType)) {
       this.#ee.emit('error', new Error('incomplete message, invalid messageType'));
       return;
@@ -299,22 +302,23 @@ export default class Enzo {
       messageId: new Uint8Array(0),
     };
 
-    let offset = 0;
+    let offset = 1;
 
     // all length
-    let _allLen = e.data.slice(0, (offset += 4));
+    let _allLen = e.data.slice(offset, (offset += 4));
     let _allLenView = new DataView(_allLen, 0);
     let allLength = _allLenView.getUint32(0, true);
-    console.log('allLength', allLength);
 
     // msg id
-    res.messageId = e.data.slice((offset + 10), (offset += 10));
+    res.messageId = new Uint8Array(e.data.slice(offset, (offset += 10)));
+
+    let msgid = bufid2string(res.messageId);
 
     // no key & data
     if (offset === allLength) {
-      // 消息回复
+      // get back
       if (res.messageType === messageType.BackMessage) {
-        this.#ee.emit(bufid2string(res.messageId), res);
+        this.#ee.emit(msgid, res);
         return;
       }
       // ! unhandled
@@ -326,28 +330,26 @@ export default class Enzo {
     }
 
     // keylen
-    let _keylen = e.data.slice((offset + 4), (offset += 4));
+    let _keylen = e.data.slice(offset, (offset += 4));
     let _keyLenView = new DataView(_keylen, 0);
     let keyLength = _keyLenView.getUint32(0, true);
-    console.log('keyLength', keyLength);
 
     // key
-    let _key = e.data.slice((offset + keyLength), (offset += keyLength));
+    let _key = new Uint8Array(e.data.slice(offset, (offset += keyLength)));
     res.key = buffer2string(_key);
 
     // bodylen
-    let _bodylen = e.data.slice((offset + 4), (offset += 4));
+    let _bodylen = e.data.slice(offset, (offset += 4));
     let _bodyLenView = new DataView(_bodylen, 0);
     let bodyLength = _bodyLenView.getUint32(0, true);
-    console.log('bodyLength', bodyLength);
 
     // data
-    let _data = e.data.slice((offset + bodyLength), (offset += bodyLength));
+    let _data = new Uint8Array(e.data.slice(offset, (offset += bodyLength)));
     res.data = buffer2string(_data);
 
-    // 消息回复
+    // get back
     if (res.messageType === messageType.BackMessage) {
-      this.#ee.emit(bufid2string(res.messageId), res);
+      this.#ee.emit(msgid, res);
       return;
     }
 
@@ -413,22 +415,22 @@ const string2buffer = (str: string): Uint8Array => new TextEncoder().encode(str)
 
 const buffer2string = (buf: Uint8Array): string => new TextDecoder('utf-8').decode(buf);
 
-const mergeBuffer = (...args: Uint8Array[]): Uint8Array => {
-  // sum of individual array lengths
-  let len = 0;
-  for (const i of args) {
-    len += i.byteLength;
-  }
+// const mergeBuffer = (...args: Uint8Array[]): Uint8Array => {
+//   // sum of individual array lengths
+//   let len = 0;
+//   for (const i of args) {
+//     len += i.byteLength;
+//   }
 
-  let mergedArray = new Uint8Array(len);
+//   let mergedArray = new Uint8Array(len);
 
-  for (const idx in args) {
-    const i = Number(idx);
-    mergedArray.set(args[i], args[i - 1]?.byteLength || 0);
-  }
+//   for (const idx in args) {
+//     const i = Number(idx);
+//     mergedArray.set(args[i], args[i - 1]?.byteLength || 0);
+//   }
 
-  return mergedArray;
-};
+//   return mergedArray;
+// };
 
 const bufid2string = (buf: Uint8Array) => buf.reduce((id, byte) => {
   byte &= 63;

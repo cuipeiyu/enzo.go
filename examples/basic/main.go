@@ -11,7 +11,7 @@ import (
 func main() {
 	enzo := enzogo.New()
 
-	enzo.On("test", func(ctx *enzogo.Context) {
+	enzo.On("init", func(ctx *enzogo.Context) {
 		// log.Printf("on test message: %s", ctx.Data)
 		ctx.Write([]byte(`{"hello":"你好"}`))
 

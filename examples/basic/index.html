@@ -16,22 +16,26 @@
         address: 'ws://localhost:90/ws'
       });
 
+      window.ez.on('error', (err) => {
+        console.error('on get error', err);
+      })
+
       window.ez.on('message', () => {
         console.log('on get message');
       })
 
-      // window.ez.on('boom', (e) => {
-      //   console.log('on get boom', e.payload);
+      window.ez.on('boom', (e) => {
+        console.log('on get boom', e);
 
-      //   e.write('haha')
-      // })
+        e.write('haha')
+      })
 
-      setInterval(() => {
+      setTimeout(() => {
         console.log('post test message')
-        window.ez.emit('test', JSON.stringify({ hello: 'world' }), (data) => {
-          console.log('on test back', data)
+        window.ez.emit('init', JSON.stringify({ lang: navigator.language }), (data) => {
+          console.log('on init back', data)
         })
-      }, 4000)
+      }, 1000)
 
       await window.ez.connect()
     })();

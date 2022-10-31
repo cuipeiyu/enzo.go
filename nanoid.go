@@ -16,7 +16,7 @@ func toBHex(num byte) string {
 		b.WriteByte(num2char[yu])
 		num = num / 36
 	}
-	return strings.ToUpper(b.String())
+	return b.String()
 }
 
 func makeMsgId() string {
@@ -37,7 +37,7 @@ func bytes2BHex(r []byte) string {
 		if t < 36 {
 			str += toBHex(t)
 		} else if t < 62 {
-			str += toBHex(t - 26)
+			str += strings.ToUpper(toBHex(t - 26))
 		} else if t > 62 {
 			str += "-"
 		} else {

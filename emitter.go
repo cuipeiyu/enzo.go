@@ -5,7 +5,6 @@ package enzogo
 import (
 	"errors"
 	"fmt"
-	"os"
 	"reflect"
 	"sync"
 )
@@ -63,10 +62,10 @@ func (emitter *Emitter) addListener(event, listener interface{}, isOnce bool) Li
 		}
 	}
 
-	if emitter.maxListeners != -1 && emitter.maxListeners < len(emitter.events[event])+1 {
-		fmt.Fprintf(os.Stdout, "Warning: event `%v` has exceeded the maximum "+
-			"number of listeners of %d.\n", event, emitter.maxListeners)
-	}
+	// if emitter.maxListeners != -1 && emitter.maxListeners < len(emitter.events[event])+1 {
+	// 	fmt.Fprintf(os.Stdout, "Warning: event `%v` has exceeded the maximum "+
+	// 		"number of listeners of %d.\n", event, emitter.maxListeners)
+	// }
 
 	emitter.nextHandle = emitter.nextHandle + 1
 	handle := emitter.nextHandle

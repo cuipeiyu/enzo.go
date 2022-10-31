@@ -32,7 +32,7 @@ func (ctx *Context) GetData() string {
 }
 
 func (ctx *Context) Write(data []byte) {
-	ctx.write(PostMessage, ctx.payload.MsgID, ctx.payload.Key, data, func(ctx *Context) {})
+	ctx.write(BackMessage, ctx.payload.MsgID, ctx.payload.Key, data, func(ctx *Context) {})
 }
 
 func (ctx *Context) write(msgType byte, msgid []byte, key string, data []byte, callback Handle) {

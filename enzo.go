@@ -37,6 +37,7 @@ func New() *Enzo {
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
+			Subprotocols:    []string{"enzo-v0"},
 		},
 		emitter: newEmitter(),
 		msgconn: map[string]*websocket.Conn{},
@@ -79,7 +80,6 @@ func (enzo *Enzo) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			// all len
 			_allLength := body[offset : offset+4]
 			allLength := int(binary.LittleEndian.Uint32(_allLength))
-			log.Println("allLength", _allLength, allLength)
 			if allLength != len(body) {
 				log.Println("message length not match", allLength, len(body))
 				return
@@ -88,7 +88,6 @@ func (enzo *Enzo) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 			// msgid
 			res.MsgID = body[offset : offset+10]
-			log.Println("msgid", res.MsgID)
 			msgid := bytes2BHex(res.MsgID)
 			offset += 10
 
@@ -106,7 +105,6 @@ func (enzo *Enzo) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			// key len
 			_keyLength := body[offset : offset+4]
 			keyLength := int(binary.LittleEndian.Uint32(_keyLength))
-			log.Println("keyLength", _keyLength, keyLength)
 			offset += 4
 
 			// key
@@ -121,8 +119,6 @@ func (enzo *Enzo) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 			_data := body[offset : offset+dataLength]
 			res.Data = string(_data)
-
-			log.Printf("%#v", res)
 
 			enzo.msgconn[msgid] = conn
 			ictx := &Context{
