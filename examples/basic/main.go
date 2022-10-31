@@ -13,20 +13,20 @@ func main() {
 
 	enzo.On("test", func(ctx *enzogo.Context) {
 		// log.Printf("on test message: %s", ctx.Data)
-		ctx.Write(`{"hello":"你好"}`)
+		ctx.Write([]byte(`{"hello":"你好"}`))
 
 		time.Sleep(2 * time.Second)
 
-		ctx.Emit("boom", "some content", func(ctx *enzogo.Context) {
+		ctx.Emit("boom", []byte("some content"), func(ctx *enzogo.Context) {
 			log.Println("boom result", ctx.Data)
 
-			ctx.Write("ok")
+			ctx.Write([]byte("ok"))
 		})
 	})
 
 	http.Handle("/", http.StripPrefix("/", http.FileServer(http.Dir("."))))
 	http.HandleFunc("/enzo.js", func(rw http.ResponseWriter, r *http.Request) {
-		http.ServeFile(rw, r, "../../js-sdk/dist/index.umd.js")
+		http.ServeFile(rw, r, "../../js-sdk/dist/index.es.js")
 	})
 	http.HandleFunc("/ws", enzo.ServeHTTP)
 

@@ -5,11 +5,12 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Example</title>
-  <script src="/enzo.js"></script>
 </head>
 <body>
 
-  <script>
+  <script type="module">
+    import Enzo from '/enzo.js'
+
     !(async () => {
       window.ez = new Enzo({
         address: 'ws://localhost:90/ws'

@@ -1,6 +1,4 @@
-/* eslint-disable max-classes-per-file */
 import EventEmitter from 'eventemitter3';
-import { nanoid } from 'nanoid';
 
 export declare interface EnzoOption {
   /** server address e.g: ws://localhost */
@@ -14,16 +12,23 @@ export declare interface EnzoOption {
 // export declare interface Response {
 // }
 
+enum messageType {
+  PingMessage = 0x1,
+  PongMessage = 0x2,
+  PostMessage = 0x28,
+  BackMessage = 0x29,
+}
+
 interface payload {
-  msgid: string;
-  key: string;
-  way: 'post' | 'back';
+  messageType: messageType;
+  messageId: Uint8Array;
+  key?: string;
   data?: any;
 }
 
 export type Handle = (p: any) => void | Promise<void>;
 
-class Enzo {
+export default class Enzo {
   #opt: EnzoOption;
 
   #ee: EventEmitter;
@@ -63,39 +68,136 @@ class Enzo {
     this.#ee.on('ws_message', this.#wsmessage.bind(this));
   }
 
-  public emit(key: string, data: string, cb?: (res: any) => void): Promise<any> {
-    const _this = this;
-    const msgid = nanoid(10);
-    const eventid = msgid + '_response';
-    return new Promise((resolve, reject) => {
-      let back = false;
+  // make message frame
+  // | base: (5)       | messageType(1) | allLength(5)  |
+  // | header: (11)    | messageId(10)  |
+  // | data: (4+x+4+x) | keyLength(4)   | key(x)        | dataLength(4) | dataBody(x) |
+  write(type: messageType, msgId?: Uint8Array, key?: string, data?: any, callback?: (res: Context | Error) => void) {
+    // ping & pong
+    if (
+      type === messageType.PingMessage
+      || type === messageType.PongMessage
+    ) {
+      this.#socket.send(mergeBuffer(new Uint8Array([type, 0, 0, 0, 0])));
+      return;
+    }
 
-      _this.#socket.send(JSON.stringify({
-        msgid,
-        way: 'post',
-        key,
-        data,
-      } as payload));
+    let allLength = 1 + 4;
 
-      // set timer
-      _this.#eventTimers[eventid] = window.setTimeout(() => {
-        _this.#ee.removeListener(eventid);
-        if (!back) reject(new Error('Timeout'));
-      }, 5000);
+    if (!msgId) msgId = crypto.getRandomValues(new Uint8Array(10));
 
-      // waiting back
-      _this.#ee.once(eventid, (res: payload) => {
-        back = true;
+    allLength += 10;
 
-        if (eventid in _this.#eventTimers) {
-          console.log('clear event timer', eventid);
+    let keyBuf: Uint8Array | undefined;
+    let dataBuf: Uint8Array | undefined;
 
-          clearTimeout(_this.#eventTimers[eventid]);
-          delete _this.#eventTimers[eventid];
+    if (data) {
+      if (data instanceof Uint8Array) {
+        dataBuf = data;
+      } else if (typeof data === 'string') {
+        dataBuf = string2buffer(data);
+      } else {
+        try {
+          dataBuf = string2buffer(JSON.stringify(data));
+        } catch (err) {
+          return;
         }
-        if (cb) cb(res.data);
+      }
+    }
 
-        resolve(res.data);
+    if (key) {
+      keyBuf = string2buffer(key);
+      allLength += 4 + keyBuf.byteLength;
+    }
+
+    if (dataBuf) {
+      allLength += 4 + dataBuf?.byteLength;
+    }
+
+    let offset = 0;
+    let buf = new Uint8Array(allLength);
+
+    // message type
+    buf.set([type], 0);
+    offset += 1;
+
+    // allLength
+    let al = new Uint32Array([allLength]);
+
+    buf.set(al, offset);
+    offset += al.byteLength;
+
+    // msgid
+    let msgid = bufid2string(msgId);
+    buf.set(msgId, offset);
+    offset += msgId.byteLength;
+
+    if (keyBuf) {
+      // keylen
+      let kl = new Uint32Array([keyBuf!.byteLength]);
+      buf.set(kl, offset);
+      offset += kl.byteLength;
+
+      // key
+      buf.set(keyBuf, offset);
+      offset += keyBuf.byteLength;
+    }
+
+    if (dataBuf) {
+      // datalen
+      let dl = new Uint32Array([dataBuf!.byteLength]);
+      buf.set(dl, offset);
+      offset += dl.byteLength;
+
+      // data
+      buf.set(dataBuf, offset);
+    }
+
+    this.#socket.send(buf);
+
+    if (!callback) return;
+
+    let back = false;
+
+    // set timer
+    this.#eventTimers[msgid] = window.setTimeout(() => {
+      // remove listener
+      this.#ee.removeListener(msgid);
+
+      // return an error
+      if (!back && callback) callback(new Error('Timeout'));
+    }, 5000);
+
+    // waiting back
+    this.#ee.once(msgid, (res: payload) => {
+      back = true;
+
+      // remove listener
+      this.#ee.removeListener(msgid);
+
+      // remove timer
+      if (msgid in this.#eventTimers) {
+        console.log('clear event timer', msgid);
+
+        clearTimeout(this.#eventTimers[msgid]);
+        delete this.#eventTimers[msgid];
+      }
+
+      // success
+      if (callback) callback(new Context(this, res.data));
+    });
+  }
+
+  public emit(key: string, data: any, cb?: (res: Context) => void): Promise<any> {
+    const _this = this;
+    return new Promise((resolve, reject) => {
+      _this.write(messageType.PostMessage, void 0, key, data, (res: Context | Error) => {
+        if (res instanceof Error) {
+          reject(res);
+        } else {
+          if (cb) cb(res);
+          resolve(res);
+        }
       });
     });
   }
@@ -114,7 +216,7 @@ class Enzo {
       if (_this.#inited) return resolve(_this);
 
       _this.#socket = new WebSocket(_this.#opt.address);
-      // _this.#socket.binaryType = 'arraybuffer';
+      _this.#socket.binaryType = 'arraybuffer';
       // _this.#socket.addEventListener('open', _this.#onopen);
       // _this.#socket.addEventListener('message', _this.#onmessage);
       // _this.#socket.addEventListener('error', _this.#onerror);
@@ -169,30 +271,87 @@ class Enzo {
 
   #wsopen(_e: Event) {
     this.#startHeartbeatTimer();
-    this.#socket.send('hi');
     this.#setConnected(true, true);
   }
 
-  #wsmessage(e: MessageEvent) {
+  #wsmessage(e: MessageEvent<Uint8Array>) {
     this.#setConnected(true);
     this.#resetHeartbeatTimer();
 
-    let res: payload;
-    try {
-      res = JSON.parse(e.data);
-
-      if (!res) return;
-    } catch (error) {
-      console.error('unknown response body');
+    const mt = Number(e.data.slice(0, 1));
+    if (!mt || !(mt in messageType)) {
+      this.#ee.emit('error', new Error('incomplete message, invalid messageType'));
       return;
     }
 
-    // 消息回复
-    if (res.way === 'back') {
-      this.#ee.emit(res.msgid + '_response', e);
+    if (mt === messageType.PingMessage) {
+      this.write(messageType.PongMessage);
+      this.#ee.emit('ping');
+      return;
+    }
+    if (mt === messageType.PongMessage) {
+      // skip
+      return;
     }
 
-    this.#ee.emit(res.key, new Context(this, res, this.#socket));
+    let res: payload = {
+      messageType: mt,
+      messageId: new Uint8Array(0),
+    };
+
+    let offset = 0;
+
+    // all length
+    let _allLen = e.data.slice(0, (offset += 4));
+    let _allLenView = new DataView(_allLen, 0);
+    let allLength = _allLenView.getUint32(0, true);
+    console.log('allLength', allLength);
+
+    // msg id
+    res.messageId = e.data.slice((offset + 10), (offset += 10));
+
+    // no key & data
+    if (offset === allLength) {
+      // 消息回复
+      if (res.messageType === messageType.BackMessage) {
+        this.#ee.emit(bufid2string(res.messageId), res);
+        return;
+      }
+      // ! unhandled
+      // no key
+      if (res.messageType === messageType.PongMessage) {
+        //
+      }
+      return;
+    }
+
+    // keylen
+    let _keylen = e.data.slice((offset + 4), (offset += 4));
+    let _keyLenView = new DataView(_keylen, 0);
+    let keyLength = _keyLenView.getUint32(0, true);
+    console.log('keyLength', keyLength);
+
+    // key
+    let _key = e.data.slice((offset + keyLength), (offset += keyLength));
+    res.key = buffer2string(_key);
+
+    // bodylen
+    let _bodylen = e.data.slice((offset + 4), (offset += 4));
+    let _bodyLenView = new DataView(_bodylen, 0);
+    let bodyLength = _bodyLenView.getUint32(0, true);
+    console.log('bodyLength', bodyLength);
+
+    // data
+    let _data = e.data.slice((offset + bodyLength), (offset += bodyLength));
+    res.data = buffer2string(_data);
+
+    // 消息回复
+    if (res.messageType === messageType.BackMessage) {
+      this.#ee.emit(bufid2string(res.messageId), res);
+      return;
+    }
+
+    this.#ee.emit(res.key, new Context(this, res));
   }
 
   #wserror(_e: Event) {
@@ -210,10 +369,7 @@ class Enzo {
     if (_this.#heartbeatTimer) return;
 
     _this.#heartbeatTimer = window.setInterval(() => {
-      _this.#socket.send(new Uint8Array([0x9]));
-      // _this.emit('ping', '', () => {
-      //   console.log('pong');
-      // });
+      _this.write(messageType.PingMessage);
     }, 15e3);
   }
 
@@ -235,24 +391,17 @@ class Context {
 
   #payload: payload;
 
-  #socket: WebSocket;
-
-  constructor(enzo: Enzo, payload: payload, socket: WebSocket) {
+  constructor(enzo: Enzo, payload: payload) {
     this.#enzo = enzo;
     this.#payload = payload;
-    this.#socket = socket;
   }
 
   get data() {
     return this.#payload.data;
   }
 
-  public write(data: string) {
-    this.#socket.send(JSON.stringify({
-      msgid: this.#payload.msgid,
-      way: 'back',
-      data,
-    }));
+  public write(data: any) {
+    this.#enzo.write(this.#payload.messageType, this.#payload.messageId, this.#payload.key, data);
   }
 
   public emit(key: string, data: string, cb?: (res: any) => void): Promise<any> {
@@ -260,4 +409,37 @@ class Context {
   }
 }
 
-export default Enzo;
+const string2buffer = (str: string): Uint8Array => new TextEncoder().encode(str);
+
+const buffer2string = (buf: Uint8Array): string => new TextDecoder('utf-8').decode(buf);
+
+const mergeBuffer = (...args: Uint8Array[]): Uint8Array => {
+  // sum of individual array lengths
+  let len = 0;
+  for (const i of args) {
+    len += i.byteLength;
+  }
+
+  let mergedArray = new Uint8Array(len);
+
+  for (const idx in args) {
+    const i = Number(idx);
+    mergedArray.set(args[i], args[i - 1]?.byteLength || 0);
+  }
+
+  return mergedArray;
+};
+
+const bufid2string = (buf: Uint8Array) => buf.reduce((id, byte) => {
+  byte &= 63;
+  if (byte < 36) {
+    id += byte.toString(36);
+  } else if (byte < 62) {
+    id += (byte - 26).toString(36).toUpperCase();
+  } else if (byte > 62) {
+    id += '-';
+  } else {
+    id += '_';
+  }
+  return id;
+}, '');

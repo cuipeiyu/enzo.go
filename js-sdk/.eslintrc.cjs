@@ -50,6 +50,7 @@ module.exports = {
     'indent': ['error', 2],
     'linebreak-style': ['error', 'unix'],
     'max-len': 'off',
+    'max-classes-per-file': 'off',
     'no-await-in-loop': 'off',
     'no-bitwise': 'off',
     'no-case-declarations': 'off',

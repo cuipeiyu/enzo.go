@@ -19,25 +19,30 @@ func toBHex(num byte) string {
 	return strings.ToUpper(b.String())
 }
 
-func nanoid() string {
+func makeMsgId() string {
 	b := make([]byte, 10)
 	rand.Read(b)
 
-	last := ""
-	for _, t := range b {
-		t &= 63
-		if t < 36 {
-			last += toBHex(t)
-		} else if t < 62 {
-			last += toBHex(t - 26)
-		} else if t > 62 {
-			last += "-"
-		} else {
-			last += "_"
-		}
-	}
+	last := bytes2BHex(b)
 	if len(last) != 10 {
-		return nanoid()
+		return makeMsgId()
 	}
 	return last
+}
+
+func bytes2BHex(r []byte) string {
+	str := ""
+	for _, t := range r {
+		t &= 63
+		if t < 36 {
+			str += toBHex(t)
+		} else if t < 62 {
+			str += toBHex(t - 26)
+		} else if t > 62 {
+			str += "-"
+		} else {
+			str += "_"
+		}
+	}
+	return str
 }

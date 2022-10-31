@@ -1,21 +1,27 @@
 package enzogo
 
 import (
-	"bytes"
-	"encoding/json"
+	"encoding/binary"
 	"log"
 	"net/http"
 
 	"github.com/gorilla/websocket"
 )
 
+const (
+	PingMessage byte = 0x1
+	PongMessage byte = 0x2
+	PostMessage byte = 0x28
+	BackMessage byte = 0x29
+)
+
 type Handle func(*Context)
 
 type payload struct {
-	MsgID string `json:"msgid"`
-	Key   string `json:"key,omitempty"`
-	Way   string `json:"way"`
-	Data  string `json:"data,omitempty"`
+	MsgType byte
+	MsgID   []byte
+	Key     string
+	Data    string
 }
 
 type Enzo struct {
@@ -46,50 +52,86 @@ func (enzo *Enzo) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-roll:
 	for {
-		messageType, p, err := conn.ReadMessage()
+		_, p, err := conn.ReadMessage()
 		if err != nil {
 			log.Println(err)
 			return
 		}
 
-	s:
-		switch messageType {
-		case websocket.TextMessage:
-			// a json message
-			if bytes.HasPrefix(p, []byte("{")) && bytes.HasSuffix(p, []byte("}")) {
-				var d payload
-				if err := json.Unmarshal(p, &d); err != nil {
-					continue roll
-				}
+		// parse
+		go func(body []byte) {
+			if body == nil {
+				return
+			}
+			if body[0] == PingMessage {
+				conn.WriteMessage(websocket.BinaryMessage, []byte{PongMessage, 0, 0, 0, 0})
+				return
+			}
+			if body[0] == PongMessage {
+				return
+			}
 
-				if d.Way == "back" {
-					enzo.emitter.Emit(d.MsgID+"_response", d)
-				} else {
-					enzo.msgconn[d.MsgID] = conn
-					ictx := &Context{
-						enzo:    enzo,
-						Conn:    conn,
-						payload: d,
-					}
-					enzo.emitter.Emit(d.Key, ictx)
+			res := payload{}
+
+			offset := 1
+
+			// all len
+			_allLength := body[offset : offset+4]
+			allLength := int(binary.LittleEndian.Uint32(_allLength))
+			log.Println("allLength", _allLength, allLength)
+			if allLength != len(body) {
+				log.Println("message length not match", allLength, len(body))
+				return
+			}
+			offset += 4
+
+			// msgid
+			res.MsgID = body[offset : offset+10]
+			log.Println("msgid", res.MsgID)
+			msgid := bytes2BHex(res.MsgID)
+			offset += 10
+
+			// no key & data
+			if offset == allLength {
+				//
+				if res.MsgType == BackMessage {
+					enzo.emitter.Emit(msgid, res)
+					return
 				}
-				continue roll
+				// ! unhandled
+				return
 			}
-			break s
-		case websocket.BinaryMessage:
-			// simulate ping & pong
-			if bytes.Equal(p, []byte{0x9}) {
-				// return pong
-				_ = conn.WriteMessage(websocket.BinaryMessage, []byte{0xA})
+
+			// key len
+			_keyLength := body[offset : offset+4]
+			keyLength := int(binary.LittleEndian.Uint32(_keyLength))
+			log.Println("keyLength", _keyLength, keyLength)
+			offset += 4
+
+			// key
+			_key := body[offset : offset+keyLength]
+			res.Key = string(_key)
+			offset += keyLength
+
+			// data
+			_dataLength := body[offset : offset+4]
+			dataLength := int(binary.LittleEndian.Uint32(_dataLength))
+			offset += 4
+
+			_data := body[offset : offset+dataLength]
+			res.Data = string(_data)
+
+			log.Printf("%#v", res)
+
+			enzo.msgconn[msgid] = conn
+			ictx := &Context{
+				enzo:    enzo,
+				Conn:    conn,
+				payload: res,
 			}
-			continue roll
-		}
-		if err := conn.WriteMessage(messageType, p); err != nil {
-			log.Println(err)
-			return
-		}
+			enzo.emitter.Emit(res.Key, ictx)
+		}(p)
 	}
 }
 
