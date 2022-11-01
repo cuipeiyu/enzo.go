@@ -102,14 +102,9 @@ export class Enzo {
   }
 
   // make message frame
-  // * | base: (1+1+10=4=16) | messageType(1) | longtime(1)  | messageId(10) | allLength(4) |
-  // ? | data: (4+x+4+x=y)   | keyLength(4)   | key(x)       | dataLength(4) | dataBody(x)  |
+  // * | base: (1+1+10=4=16) | messageType(1) | longtime(1) | messageId(10) | allLength(4) |
+  // ? | data: (4+x+4+x=y)   | keyLength(4)   | key(x)      | dataLength(4) | dataBody(x)  |
   write(msgType: messageType, longtime: boolean, callback: (e: Context | Error) => void, msgId?: Uint8Array, key?: string, data?: any) {
-    // if (!this.#connected) {
-    //   if (callback && typeof callback === 'function') callback(new Error('connection disconnected'));
-    //   return;
-    // }
-
     if (!msgId) msgId = crypto.getRandomValues(new Uint8Array(10));
     const msgid = bufid2string(msgId);
 
@@ -118,17 +113,6 @@ export class Enzo {
       this.#socket.send(new Uint8Array([msgType, 0, ...msgId, 0, 0, 0, 0]));
       return;
     }
-
-    // if (type === messageType.PongMessage) {
-    //   this.#socket.send(new Uint8Array([type, 0, ...msgId, 0, 0, 0, 0]));
-    //   return;
-    // }
-
-    // if (key === void 0 || !key.length) {
-    //   this.#socket.send(new Uint8Array([type, 0, ...msgId, 0, 0, 0, 0]));
-    //   this.waitMessageReturn(msgid, longtime ? 0 : 6000, callback);
-    //   return;
-    // }
 
     let keyBuf: Uint8Array | undefined;
     let dataBuf: Uint8Array | undefined;
@@ -239,12 +223,12 @@ export class Enzo {
         // this.#doReconnect();
 
         // return an error
-        if (!replied) callback(new Error('timeout 2'));
+        if (!replied) callback(new Error('timeout'));
       }, timeout);
     }
 
     // waiting back
-    this.#ee.once(replyid, (res: payload) => {
+    this.#ee.once(replyid, (res: Context | Error) => {
       replied = true;
 
       // remove timer
@@ -254,7 +238,7 @@ export class Enzo {
       }
 
       // success
-      callback(new Context(this, res));
+      callback(res);
     });
   }
 
@@ -303,7 +287,7 @@ export class Enzo {
         if (self.#connected) return resolve(self);
 
         if (self.#connectTimer) clearTimeout(self.#connectTimer);
-        self.#connectTimer = setTimeout(() => {
+        self.#connectTimer = window.setTimeout(() => {
           if (self.#connected) return;
 
           reject(new Error('timeout'));
@@ -332,13 +316,7 @@ export class Enzo {
               self.#ee.emit('ws_message', e);
             };
 
-            // try
-            let s = Date.now();
-            console.log('post ping message for test, ', s);
-
             self.write(messageType.PingMessage, false, (e: Context | Error) => {
-              let f = Date.now();
-              console.log(' got pong message for text, ', f, f - s);
               self.#reconnectDone();
 
               if (e instanceof Error) {
@@ -408,10 +386,13 @@ export class Enzo {
     if (e.data.byteLength < 16) {
       // TODO
       // mismatched body length
+      console.error('mismatched body length');
       return;
     }
 
-    const _mt = e.data.slice(0, 1);
+    let offset = 0;
+
+    const _mt = e.data.slice(offset, (offset += 1));
     const _mtView = new Uint8Array(_mt);
     const mt = _mtView.at(0);
 
@@ -427,11 +408,9 @@ export class Enzo {
     };
 
     // longtime
-    const _lt = e.data.slice(1, 2);
+    const _lt = e.data.slice(offset, (offset += 1));
     const _ltView = new Uint8Array(_lt);
     res.longtime = _ltView.at(0) === 1;
-
-    let offset = 2;
 
     // msg id
     res.messageId = new Uint8Array(e.data.slice(offset, (offset += 10)));
@@ -442,9 +421,8 @@ export class Enzo {
     let _allLenView = new DataView(_allLen, 0);
     let allLength = _allLenView.getUint32(0, true);
 
-    // no key & data
-    if (offset === 16 && !allLength) {
-      if (mt === messageType.PongMessage) {
+    if (!allLength) {
+      if (res.messageType === messageType.PongMessage) {
         this.#ee.emit(msgid, new Context(this, res));
         return;
       }
@@ -454,12 +432,14 @@ export class Enzo {
         return;
       }
       // ! unhandled
+      console.error('unhandled');
       return;
     }
 
-    if ((e.data.byteLength - 16) !== allLength) {
+    if ((e.data.byteLength - 16) !== allLength - offset) {
       // TODO
       // mismatched body length
+      console.error('mismatched body length');
       return;
     }
 
@@ -535,7 +515,7 @@ export class Enzo {
   #startHeartbeatTimer(immediate = false) {
     const self = this;
 
-    // exits
+    // exists
     if (self.#heartbeatTimer) return;
 
     if (immediate) {
@@ -580,15 +560,16 @@ class Context {
     this.#payload = payload;
     this.#replied = false;
 
-    if (!payload.longtime) {
+    if (this.#payload.messageType === messageType.PostMessage && !payload.longtime) {
       this.#replyTimer = window.setTimeout(() => {
         clearTimeout(this.#replyTimer);
         if (this.#replied) return;
 
         // reply default message
         this.#replied = true;
+
         this.#enzo.write(messageType.BackMessage, false, () => { }, this.#payload.messageId, this.#payload.key, new Uint8Array(0));
-      }, 5000);
+      }, 3000);
     }
   }
 

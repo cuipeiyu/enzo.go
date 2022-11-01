@@ -102,10 +102,6 @@ func (enzo *Enzo) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			// all len
 			_allLength := body[offset : offset+4]
 			allLength := int(binary.LittleEndian.Uint32(_allLength))
-			if allLength != len(body) {
-				log.Println("message length not match", allLength, len(body))
-				return
-			}
 			offset += 4
 
 			// no key & data

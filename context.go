@@ -2,7 +2,6 @@ package enzogo
 
 import (
 	"bytes"
-	"crypto/rand"
 	"encoding/binary"
 	"time"
 
@@ -18,7 +17,7 @@ func newContext(enzo *Enzo, conn *websocket.Conn, payload payload) *Context {
 	}
 
 	if !payload.Longtime {
-		c.timer = time.AfterFunc(5*time.Second, func() {
+		c.timer = time.AfterFunc(3*time.Second, func() {
 			if c.replied {
 				return
 			}
@@ -73,8 +72,7 @@ func (ctx *Context) Write(data []byte) {
 // ? | data: (4+x+4+x=y)   | keyLength(4)   | key(x)      | dataLength(4) | dataBody(x)  |
 func (ctx *Context) write(msgType byte, longtime bool, msgid []byte, key string, data []byte, callback Handle) {
 	if msgid == nil {
-		msgid = make([]byte, 10)
-		rand.Read(msgid)
+		msgid = makeMsgId()
 	}
 
 	if msgType == PongMessage {
@@ -138,15 +136,10 @@ func (ctx *Context) write(msgType byte, longtime bool, msgid []byte, key string,
 		eventid := bytes2BHex(msgid)
 
 		// wait back
-		handler := ctx.enzo.emitter.Once(eventid, func(d payload) {
+		handler := ctx.enzo.emitter.Once(eventid, func(ctx *Context) {
 			timer.Stop()
 
-			ictx := &Context{
-				enzo:    ctx.enzo,
-				Conn:    ctx.Conn,
-				payload: d,
-			}
-			callback(ictx)
+			callback(ctx)
 		})
 
 		timer = time.AfterFunc(6*time.Second, func() {
@@ -168,8 +161,7 @@ func (ctx *Context) write(msgType byte, longtime bool, msgid []byte, key string,
 }
 
 func (ctx *Context) Emit(key string, data []byte, cb ...Handle) error {
-	msgid := make([]byte, 10)
-	rand.Read(msgid)
+	msgid := makeMsgId()
 
 	var callback Handle
 
@@ -185,8 +177,7 @@ func (ctx *Context) Emit(key string, data []byte, cb ...Handle) error {
 }
 
 func (ctx *Context) LongtimeEmit(key string, data []byte, cb ...Handle) error {
-	msgid := make([]byte, 10)
-	rand.Read(msgid)
+	msgid := makeMsgId()
 
 	var callback Handle
 

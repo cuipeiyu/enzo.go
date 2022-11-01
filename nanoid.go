@@ -19,15 +19,10 @@ func toBHex(num byte) string {
 	return b.String()
 }
 
-func makeMsgId() string {
+func makeMsgId() []byte {
 	b := make([]byte, 10)
 	rand.Read(b)
-
-	last := bytes2BHex(b)
-	if len(last) != 10 {
-		return makeMsgId()
-	}
-	return last
+	return b
 }
 
 func bytes2BHex(r []byte) string {
