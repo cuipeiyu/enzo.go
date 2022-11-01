@@ -9,7 +9,7 @@
 <body>
 
   <script type="module">
-    import Enzo from '/enzo.js'
+    import { Enzo } from '/enzo.js'
 
     !(async () => {
       window.ez = new Enzo({
@@ -37,7 +37,7 @@
         })
       }, 1000)
 
-      await window.ez.connect()
+      // await window.ez.connect()
     })();
   </script>
 </body>

@@ -9,8 +9,11 @@ import (
 )
 
 const (
-	PingMessage byte = 0x1
-	PongMessage byte = 0x2
+	CloseMessage byte = 0x01
+
+	PingMessage byte = 0x14
+	PongMessage byte = 0x15
+
 	PostMessage byte = 0x28
 	BackMessage byte = 0x29
 )
@@ -18,18 +21,17 @@ const (
 type Handle func(*Context)
 
 type payload struct {
-	MsgType byte
-	MsgID   []byte
-	Key     string
-	Data    string
+	MsgType  byte
+	MsgID    []byte
+	Longtime bool
+	Key      string
+	Data     string
 }
 
 type Enzo struct {
 	upgrader websocket.Upgrader
 
 	emitter *Emitter
-
-	msgconn map[string]*websocket.Conn
 }
 
 func New() *Enzo {
@@ -40,7 +42,6 @@ func New() *Enzo {
 			Subprotocols:    []string{"enzo-v0"},
 		},
 		emitter: newEmitter(),
-		msgconn: map[string]*websocket.Conn{},
 	}
 }
 
@@ -65,17 +66,38 @@ func (enzo *Enzo) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			if body == nil {
 				return
 			}
+			if len(body) < 16 {
+				// TODO
+				// mismatched body length
+				return
+			}
 			if body[0] == PingMessage {
-				conn.WriteMessage(websocket.BinaryMessage, []byte{PongMessage, 0, 0, 0, 0})
+				body[0] = PongMessage
+				conn.WriteMessage(websocket.BinaryMessage, body)
+				enzo.emitter.Emit("ping")
 				return
 			}
 			if body[0] == PongMessage {
+				// skip
 				return
 			}
 
 			res := payload{}
 
-			offset := 1
+			offset := 0
+
+			// message type
+			res.MsgType = body[0]
+			offset += 1
+
+			// longtime
+			res.Longtime = body[offset] == 0x1
+			offset += 1
+
+			// msgid
+			res.MsgID = body[offset : offset+10]
+			msgid := bytes2BHex(res.MsgID)
+			offset += 10
 
 			// all len
 			_allLength := body[offset : offset+4]
@@ -86,19 +108,20 @@ func (enzo *Enzo) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			}
 			offset += 4
 
-			// msgid
-			res.MsgID = body[offset : offset+10]
-			msgid := bytes2BHex(res.MsgID)
-			offset += 10
-
 			// no key & data
-			if offset == allLength {
+			if offset == 16 && allLength == 0 {
 				//
 				if res.MsgType == BackMessage {
-					enzo.emitter.Emit(msgid, res)
+					enzo.emitter.Emit(msgid, newContext(enzo, conn, res))
 					return
 				}
 				// ! unhandled
+				return
+			}
+
+			if len(body)-16 != allLength {
+				// TODO
+				// mismatched body length
 				return
 			}
 
@@ -119,14 +142,13 @@ func (enzo *Enzo) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 			_data := body[offset : offset+dataLength]
 			res.Data = string(_data)
+			offset += dataLength
 
-			enzo.msgconn[msgid] = conn
-			ictx := &Context{
-				enzo:    enzo,
-				Conn:    conn,
-				payload: res,
+			if res.MsgType == BackMessage {
+				enzo.emitter.Emit(msgid, newContext(enzo, conn, res))
+				return
 			}
-			enzo.emitter.Emit(res.Key, ictx)
+			enzo.emitter.Emit(res.Key, newContext(enzo, conn, res))
 		}(p)
 	}
 }
