@@ -543,7 +543,7 @@ export class Enzo {
   }
 }
 
-class Context {
+export class Context {
   #enzo: Enzo;
 
   #payload: payload;
@@ -627,4 +627,10 @@ const bufid2string = (buf: Uint8Array) => buf.reduce((id, byte) => {
   return id;
 }, '');
 
-export default { Enzo };
+export default { Enzo, Context };
+
+if (window) {
+  Object.defineProperty(window, 'Enzo', {
+    value: Enzo,
+  });
+}
