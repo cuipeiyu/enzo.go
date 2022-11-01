@@ -220,7 +220,7 @@ export class Enzo {
           delete this.#timers[msgid];
         }
 
-        // this.#doReconnect();
+        this.#doReconnect();
 
         // return an error
         if (!replied) callback(new Error('timeout'));
@@ -292,11 +292,18 @@ export class Enzo {
 
           reject(new Error('timeout'));
           self.#doReconnect();
-        }, 6000);
+        }, 2000);
 
-        // if (self.#socket) self.#socket.close();
+        if (self.#socket) self.#socket.close(1000);
         self.#socket = new WebSocket(self.#opt.address, ['enzo-v0']);
-        self.#socket.binaryType = 'arraybuffer';
+
+        self.#socket.onerror = function (e: Event) {
+          reject(e);
+
+          self.#ee.emit('ws_error', e);
+        };
+
+        self.#socket.binaryType = 'blob';
 
         self.#socket.onopen = function () {
           setTimeout(() => {
@@ -316,26 +323,18 @@ export class Enzo {
               self.#ee.emit('ws_message', e);
             };
 
+            // test
             self.write(messageType.PingMessage, false, (e: Context | Error) => {
-              self.#reconnectDone();
-
               if (e instanceof Error) {
                 reject(e);
                 return;
               }
-              resolve(self);
 
               self.#ee.emit('ws_open');
+
+              resolve(self);
             });
           }, 100);
-        };
-
-        self.#socket.onerror = function (e: Event) {
-          if (self.#connectTimer) clearTimeout(self.#connectTimer);
-
-          reject(e);
-
-          self.#ee.emit('ws_error', e);
         };
       }, 200);
     });
@@ -346,13 +345,15 @@ export class Enzo {
 
     this.#clearHeartbeatTimer();
 
-    this.#socket.close();
+    // Close code https://www.rfc-editor.org/rfc/rfc6455.html#section-7.1.5
+    this.#socket.close(1000);
   }
 
   public reconnect() {
     if (this.#connected) return;
 
-    this.#socket.close();
+    // Close code https://www.rfc-editor.org/rfc/rfc6455.html#section-7.1.5
+    this.#socket.close(1000);
     return this.connect();
   }
 
@@ -506,10 +507,6 @@ export class Enzo {
           }
         });
     }, Math.min(this.#maxReconnectInterval, timeout));
-  }
-
-  #reconnectDone() {
-    this.#reconnect = false;
   }
 
   #startHeartbeatTimer(immediate = false) {
