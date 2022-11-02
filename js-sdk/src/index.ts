@@ -192,7 +192,7 @@ export class Enzo {
       offset += keyBuf.byteLength;
 
       // datalen
-      let dl = new Uint32Array([dataBuf!.byteLength]);
+      let dl = new Uint32Array([dataBuf?.byteLength || 0]);
       buf.set(dl, offset);
       offset += dl.byteLength;
 

@@ -3,27 +3,34 @@ package sessions
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"log"
 	"sync"
-	"time"
 
 	enzogo "github.com/cuipeiyu/enzo.go"
 )
 
-func New() *Sessions {
+type Storage interface {
+	Size() int64
+	Set(string, []byte, int) error
+	Get(string) ([]byte, error)
+	Del(string) error
+	TTL(string, int) error
+	RemoveAll() error
+}
+
+func New(store func() Storage) *Sessions {
+	if store == nil {
+		return nil
+	}
 	return &Sessions{
-		state: sync.Map{},
+		state:    sync.Map{},
+		newStore: store,
 	}
 }
 
-type stateData struct {
-	data     []byte
-	expireAt *time.Time
-}
-
 type Sessions struct {
-	state sync.Map
+	state    sync.Map
+	newStore func() Storage
 }
 
 func (s *Sessions) Name() string {
@@ -36,6 +43,7 @@ func (s *Sessions) Install(enzo *enzogo.Enzo) {
 	enzo.On(name+"|set", s.onSet)
 	enzo.On(name+"|get", s.onGet)
 	enzo.On(name+"|ttl", s.onTTL)
+	enzo.On(name+"|sizes", s.onSizes)
 	enzo.On(name+"|clean", s.onClean)
 
 	enzo.On("close", s.remove)
@@ -46,7 +54,7 @@ func (s *Sessions) onSet(ctx *enzogo.Context) {
 	data := ctx.GetData()
 
 	// parse data
-	// ttl + keylen + key + datalen + data
+	// ttl + keylen + key + datalen + (dataType + data)
 
 	_ttl := data[offset : offset+4]
 	offset += 4
@@ -69,20 +77,11 @@ func (s *Sessions) onSet(ctx *enzogo.Context) {
 
 	m := s.getStateMap(ctx)
 
-	if ttl < 0 {
-		m.Delete(key)
+	err := m.Set(key, body, int(ttl))
+	if err != nil {
+		ctx.Write(s.errorBody(err))
 		return
 	}
-
-	tmp := &stateData{
-		data:     body,
-		expireAt: nil, // infinite
-	}
-	if ttl > 0 {
-		t := time.Now().Add(time.Duration(ttl) * time.Second)
-		tmp.expireAt = &t
-	}
-	m.Store(key, tmp)
 
 	ctx.Write(s.normalBody(nil))
 }
@@ -103,29 +102,14 @@ func (s *Sessions) onGet(ctx *enzogo.Context) {
 	key := string(_key)
 
 	m := s.getStateMap(ctx)
-	t, ok := m.Load(key)
-	if !ok {
-		ctx.Write(s.errorBody(errors.New("key not found 1")))
-		return
-	}
-	if t == nil {
-		m.Delete(key)
-		ctx.Write(s.errorBody(errors.New("key not found 2")))
-		return
-	}
-	item, ok := t.(*stateData)
-	if !ok || item == nil {
-		m.Delete(key)
-		ctx.Write(s.errorBody(errors.New("key not found 3")))
-		return
-	}
-	if item.expireAt != nil && time.Now().After(*item.expireAt) {
-		m.Delete(key)
-		ctx.Write(s.errorBody(errors.New("key not found 4")))
+
+	body, err := m.Get(key)
+	if err != nil {
+		ctx.Write(s.errorBody(err))
 		return
 	}
 
-	ctx.Write(s.normalBody(item.data))
+	ctx.Write(s.normalBody(body))
 }
 
 func (s *Sessions) onTTL(ctx *enzogo.Context) {
@@ -149,68 +133,38 @@ func (s *Sessions) onTTL(ctx *enzogo.Context) {
 
 	m := s.getStateMap(ctx)
 
-	t, ok := m.Load(key)
-	if !ok {
-		if ttl < 0 {
-			ctx.Write(s.normalBody(nil))
-			return
-		}
-		ctx.Write(s.errorBody(errors.New("key not found")))
+	err := m.TTL(key, int(ttl))
+	if err != nil {
+		ctx.Write(s.errorBody(err))
 		return
-	}
-	if t == nil {
-		m.Delete(key)
-		if ttl < 0 {
-			ctx.Write(s.normalBody(nil))
-			return
-		}
-		ctx.Write(s.errorBody(errors.New("key not found")))
-		return
-	}
-	item, ok := t.(*stateData)
-	if !ok || item == nil {
-		m.Delete(key)
-		if ttl < 0 {
-			ctx.Write(s.normalBody(nil))
-			return
-		}
-		ctx.Write(s.errorBody(errors.New("key not found")))
-		return
-	}
-	// already expired
-	if item.expireAt != nil && time.Now().After(*item.expireAt) {
-		m.Delete(key)
-		if ttl < 0 {
-			ctx.Write(s.normalBody(nil))
-			return
-		}
-		ctx.Write(s.errorBody(errors.New("key not found")))
-		return
-	}
-
-	if ttl > 0 {
-		t := time.Now().Add(time.Duration(ttl) * time.Second)
-		item.expireAt = &t
 	}
 
 	ctx.Write(s.normalBody(nil))
+}
+
+func (s *Sessions) onSizes(ctx *enzogo.Context) {
+	m := s.getStateMap(ctx)
+
+	v := m.Size()
+
+	al := make([]byte, 4)
+	binary.LittleEndian.PutUint32(al, uint32(v))
+
+	ctx.Write(s.normalBody(al))
 }
 
 func (s *Sessions) onClean(ctx *enzogo.Context) {
 	m := s.getStateMap(ctx)
 
-	m.Range(func(key, _ any) bool {
-		m.Delete(key)
-		return true
-	})
+	m.RemoveAll()
 
 	ctx.Write(s.normalBody(nil))
 }
 
-func (s *Sessions) getStateMap(ctx *enzogo.Context) *sync.Map {
+func (s *Sessions) getStateMap(ctx *enzogo.Context) Storage {
 	connid := ctx.GetId()
-	m, _ := s.state.LoadOrStore(connid, &sync.Map{})
-	return m.(*sync.Map)
+	m, _ := s.state.LoadOrStore(connid, s.newStore())
+	return m.(Storage)
 }
 
 func (s *Sessions) remove(ctx *enzogo.Context) {

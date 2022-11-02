@@ -6,6 +6,12 @@ import type { Enzo, Context, Plugin } from '../../index';
 
 // export const sessionsDefaults: SessionsOptions = {};
 
+enum dataType {
+  bool = 0x01,
+  int32 = 0x02,
+  string = 0x03,
+}
+
 export class Sessions implements Plugin {
   // #opt: SessionsOptions;
 
@@ -102,7 +108,11 @@ export class Sessions implements Plugin {
       return void 0;
     }
 
-    const view = new DataView(buf, 0);
+    if (buf.at(0) !== dataType.int32) {
+      return Promise.reject(new Error('data type not match'));
+    }
+
+    const view = new DataView(buf.slice(1).buffer, 0);
     const num = view.getInt32(0, true);
     cb && cb(num);
     return num;
@@ -115,7 +125,11 @@ export class Sessions implements Plugin {
       return void 0;
     }
 
-    const str = this.#enzo.buffer2string(buf);
+    if (buf.at(0) !== dataType.string) {
+      return Promise.reject(new Error('data type not match'));
+    }
+
+    const str = this.#enzo.buffer2string(buf.slice(1));
     cb && cb(str);
     return str;
   }
@@ -127,7 +141,11 @@ export class Sessions implements Plugin {
       return void 0;
     }
 
-    const t = buf.at(0) === 0x01;
+    if (buf.at(0) !== dataType.bool) {
+      return Promise.reject(new Error('data type not match'));
+    }
+
+    const t = buf.at(1) === 0x01;
 
     cb && cb(t);
     return t;
@@ -151,9 +169,9 @@ export class Sessions implements Plugin {
     return tmp;
   }
 
-  setRaw(key: string, data: Uint8Array, ttl?: number): Promise<void> {
+  setRaw(key: string, dataType: dataType, data: Uint8Array, ttl?: number): Promise<void> {
     return new Promise((resolve, reject) => {
-      // ttl + keylen + key + datalen + data
+      // ttl + keylen + key + datalen + (dataType + data)
       let allLength = 0;
       // ttl
       let t = new Int32Array([ttl || 0]);
@@ -164,14 +182,15 @@ export class Sessions implements Plugin {
       let kl = new Uint32Array([keyBuf!.byteLength]);
       allLength += kl.byteLength + keyBuf.byteLength;
       // data
-      let dl = new Uint32Array([data.byteLength]);
+      let dl = new Uint32Array([data.byteLength + 1]);
 
-      allLength += dl.byteLength + data.byteLength;
+      allLength += dl.byteLength + 1 + data.byteLength;
 
       // write
 
       const buf = new Uint8Array(allLength);
       let offset = 0;
+
       // ttl
       buf.set(t, offset);
       offset += t.byteLength;
@@ -187,6 +206,10 @@ export class Sessions implements Plugin {
       // datalen
       buf.set(dl, offset);
       offset += dl.byteLength;
+
+      // dataType
+      buf.set([dataType], offset);
+      offset += 1;
 
       // data
       buf.set(data, offset);
@@ -210,21 +233,30 @@ export class Sessions implements Plugin {
   }
 
   async setNumber(key: string, val: number, ttl?: number, cb?: () => void): Promise<void> {
-    const data = new Uint8Array(new Int32Array([val]));
-    await this.setRaw(key, data, ttl);
+    if (typeof val !== 'number') {
+      return Promise.reject(new Error('parameter error, not a number'));
+    }
+    const data = new Uint8Array(new Int32Array([val]).buffer);
+    await this.setRaw(key, dataType.int32, data, ttl);
 
     cb && cb();
   }
 
   async setString(key: string, val: string, ttl?: number, cb?: () => void): Promise<void> {
+    if (typeof val !== 'string') {
+      return Promise.reject(new Error('parameter error, not a string'));
+    }
     const data = this.#enzo.string2buffer(val);
-    await this.setRaw(key, data, ttl);
+    await this.setRaw(key, dataType.string, data, ttl);
     cb && cb();
   }
 
   async setBoolean(key: string, val: boolean, ttl?: number, cb?: () => void): Promise<void> {
+    if (typeof val !== 'boolean') {
+      return Promise.reject(new Error('parameter error, not a boolean'));
+    }
     const data = new Uint8Array([val ? 0x01 : 0x00]);
-    await this.setRaw(key, data, ttl);
+    await this.setRaw(key, dataType.bool, data, ttl);
     cb && cb();
   }
 
@@ -243,11 +275,12 @@ export class Sessions implements Plugin {
       // ttl + keylen + key
       let allLength = 0;
       // ttl
-      let t = new Uint8Array(new Int32Array([ttl || 0]));
+      let t = new Uint8Array(new Int32Array([ttl || 0]).buffer);
+      allLength += t.byteLength;
       // key
       let keyBuf = this.#enzo.string2buffer(key);
       // keylen
-      let kl = new Uint8Array(new Uint32Array([keyBuf.byteLength]));
+      let kl = new Uint8Array(new Uint32Array([keyBuf.byteLength]).buffer);
       allLength += kl.byteLength + keyBuf.byteLength;
 
       // write
@@ -257,7 +290,7 @@ export class Sessions implements Plugin {
 
       // ttl
       buf.set(t, offset);
-      offset += 4;
+      offset += t.byteLength;
 
       // key length
       buf.set(kl, offset);
@@ -270,15 +303,53 @@ export class Sessions implements Plugin {
       this.#enzo.write(this.#messageType, false, (e: Context | Error) => {
         if (e instanceof Error) {
           reject(e);
+        } else if (e.data) {
+          const b = this.parseResponse(e.data);
+
+          if (b instanceof Error) {
+            reject(b);
+          } else {
+            resolve();
+          }
         } else {
-          resolve();
+          reject(new Error('empty'));
         }
       }, void 0, this.pluginName + '|ttl', buf);
     });
   }
 
   del(key: string) {
-    return this.setRaw(key, new Uint8Array(0), -1);
+    return this.setRaw(key, dataType.bool, new Uint8Array(0), -1);
+  }
+
+  sizes(cb?: (a1: number) => void): Promise<number> {
+    return new Promise((resolve, reject) => {
+      this.#enzo.write(this.#messageType, false, (e: Context | Error) => {
+        if (e instanceof Error) {
+          reject(e);
+        } else if (e.data) {
+          const b = this.parseResponse(e.data);
+
+          if (b instanceof Error) {
+            reject(b);
+          } else if (b) {
+            // if (b.at(0) !== dataType.int32) {
+            //   return Promise.reject(new Error('data type not match'));
+            // }
+
+            const view = new DataView(b.slice(0).buffer, 0);
+            const num = view.getInt32(0, true);
+
+            cb && cb(num);
+            resolve(num);
+          } else {
+            reject(new Error('empty'));
+          }
+        } else {
+          reject(new Error('empty'));
+        }
+      }, void 0, this.pluginName + '|sizes');
+    });
   }
 
   clean(cb?: () => void): Promise<void> {

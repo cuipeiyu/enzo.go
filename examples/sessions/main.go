@@ -6,12 +6,16 @@ import (
 
 	enzogo "github.com/cuipeiyu/enzo.go"
 	"github.com/cuipeiyu/enzo.go/plugins/sessions"
+	"github.com/cuipeiyu/enzo.go/plugins/sessions/storage/memory"
 )
 
 func main() {
 	enzo := enzogo.New()
+
 	enzo.Use(
-		sessions.New(),
+		sessions.New(func() sessions.Storage {
+			return memory.New()
+		}),
 	)
 
 	http.Handle("/", http.StripPrefix("/", http.FileServer(http.Dir("."))))
