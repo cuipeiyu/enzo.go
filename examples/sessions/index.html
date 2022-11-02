@@ -21,8 +21,7 @@
       window.ez.on('connect', async () => {
         try {
           console.log('set name:', 'bob');
-          const res1 = await window.sess.setString('name', 'bob')
-          console.log('set name back:', res1);
+          await window.sess.setString('name', 'bob')
 
           console.log('get name');
           const res2 = await window.sess.getString('name')
