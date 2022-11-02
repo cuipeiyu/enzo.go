@@ -3,13 +3,15 @@ package enzogo
 import (
 	"bytes"
 	"encoding/binary"
+	"log"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
 
-func newContext(enzo *Enzo, conn *websocket.Conn, payload payload) *Context {
+func newContext(id string, enzo *Enzo, conn *websocket.Conn, payload payload) *Context {
 	c := &Context{
+		id:      id,
 		enzo:    enzo,
 		Conn:    conn,
 		payload: payload,
@@ -33,12 +35,17 @@ func newContext(enzo *Enzo, conn *websocket.Conn, payload payload) *Context {
 }
 
 type Context struct {
+	id   string
 	enzo *Enzo
 	Conn *websocket.Conn
 	payload
 	err     error
 	replied bool
 	timer   *time.Timer
+}
+
+func (ctx *Context) GetId() string {
+	return ctx.id
 }
 
 func (ctx *Context) IsError() bool {
@@ -53,7 +60,7 @@ func (ctx *Context) GetKey() string {
 	return ctx.payload.Key
 }
 
-func (ctx *Context) GetData() string {
+func (ctx *Context) GetData() []byte {
 	return ctx.payload.Data
 }
 
@@ -149,7 +156,9 @@ func (ctx *Context) write(msgType byte, longtime bool, msgid []byte, key string,
 
 	err := ctx.Conn.WriteMessage(websocket.BinaryMessage, buf.Bytes())
 	if err != nil {
+		log.Println("write message error:", err)
 		ictx := &Context{
+			id:      ctx.id,
 			enzo:    ctx.enzo,
 			Conn:    ctx.Conn,
 			payload: payload{},

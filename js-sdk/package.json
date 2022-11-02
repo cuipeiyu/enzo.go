@@ -4,7 +4,10 @@
   "type": "module",
   "scripts": {
     "build": "npm run lint && npm run typecheck && npm run build-only && cp package-release.json dist/package.json && cp ../README.md ../LICENSE dist/",
-    "build-only": "vite build && tsc -d && rm -rf dist/index.js",
+    "build-only": "npm run build:core && npm run build:plugin:sessions && npm run build:ts",
+    "build:core": "BUILD=core vite build",
+    "build:plugin:sessions": "BUILD=plugin:sessions vite build",
+    "build:ts": "tsc -d && rm -rf dist/index.js && rm -rf dist/plugins/sessions/index.js",
     "dev": "vite",
     "lint": "eslint .",
     "release": "bumpp && npm publish",

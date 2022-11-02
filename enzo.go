@@ -1,9 +1,11 @@
 package enzogo
 
 import (
+	"crypto/rand"
 	"encoding/binary"
 	"log"
 	"net/http"
+	"sync"
 
 	"github.com/gorilla/websocket"
 )
@@ -13,6 +15,7 @@ const (
 
 	PingMessage byte = 0x14
 	PongMessage byte = 0x15
+	_           byte = 0x16 // PluginMessage
 
 	PostMessage byte = 0x28
 	BackMessage byte = 0x29
@@ -25,13 +28,16 @@ type payload struct {
 	MsgID    []byte
 	Longtime bool
 	Key      string
-	Data     string
+	Data     []byte
 }
 
 type Enzo struct {
 	upgrader websocket.Upgrader
 
 	emitter *Emitter
+
+	lock   sync.Mutex
+	events []listener
 }
 
 func New() *Enzo {
@@ -43,6 +49,8 @@ func New() *Enzo {
 			Subprotocols:    []string{"enzo-v0"},
 		},
 		emitter: newEmitter(),
+		lock:    sync.Mutex{},
+		events:  []listener{},
 	}
 }
 
@@ -55,10 +63,16 @@ func (enzo *Enzo) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// generate an id
+	connid := make([]byte, 10)
+	rand.Read(connid)
+	id := bytes2BHex(connid)
+
 	for {
 		_, p, err := conn.ReadMessage()
 		if err != nil {
-			log.Println(err)
+			log.Println("read an error: ", err)
+			enzo.emitter.Emit("close", newContext(id, enzo, conn, payload{}))
 			return
 		}
 
@@ -70,6 +84,7 @@ func (enzo *Enzo) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			if len(body) < 16 {
 				// TODO
 				// mismatched body length
+				log.Println("mismatched body length")
 				return
 			}
 			if body[0] == PingMessage {
@@ -109,7 +124,7 @@ func (enzo *Enzo) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			if offset == 16 && allLength == 0 {
 				//
 				if res.MsgType == BackMessage {
-					enzo.emitter.Emit(msgid, newContext(enzo, conn, res))
+					enzo.emitter.Emit(msgid, newContext(id, enzo, conn, res))
 					return
 				}
 				// ! unhandled
@@ -119,6 +134,7 @@ func (enzo *Enzo) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			if len(body)-16 != allLength {
 				// TODO
 				// mismatched body length
+				log.Println("mismatched body length")
 				return
 			}
 
@@ -137,25 +153,64 @@ func (enzo *Enzo) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			dataLength := int(binary.LittleEndian.Uint32(_dataLength))
 			offset += 4
 
-			_data := body[offset : offset+dataLength]
-			res.Data = string(_data)
+			res.Data = body[offset : offset+dataLength]
 			offset += dataLength
 
 			if res.MsgType == BackMessage {
-				enzo.emitter.Emit(msgid, newContext(enzo, conn, res))
+				enzo.emitter.Emit(msgid, newContext(id, enzo, conn, res))
 				return
 			}
-			enzo.emitter.Emit(res.Key, newContext(enzo, conn, res))
+			enzo.emitter.Emit(res.Key, newContext(id, enzo, conn, res))
 		}(p)
 	}
 }
 
 func (enzo *Enzo) On(key string, handle Handle) error {
-	enzo.emitter.On(key, handle)
+	enzo.lock.Lock()
+	defer enzo.lock.Unlock()
+
+	id := enzo.emitter.On(key, handle)
+	enzo.events = append(enzo.events, listener{
+		key,
+		id,
+	})
 	return nil
 }
 
 func (enzo *Enzo) Once(key string, handle Handle) error {
 	enzo.emitter.Once(key, handle)
 	return nil
+}
+
+func (enzo *Enzo) Off(key string) error {
+	enzo.lock.Lock()
+	defer enzo.lock.Unlock()
+
+	tmp := []listener{}
+	for _, l := range enzo.events {
+		if l.key == key {
+			enzo.emitter.RemoveListener(l.key, l.handle)
+		} else {
+			tmp = append(tmp, l)
+		}
+	}
+	enzo.events = tmp
+
+	return nil
+}
+
+func (enzo *Enzo) Use(plugins ...Plugin) {
+	if plugins == nil {
+		return
+	}
+
+	for _, p := range plugins {
+		log.Println("register plugin:", p.Name())
+		p.Install(enzo)
+	}
+}
+
+type listener struct {
+	key    string
+	handle ListenerHandle
 }

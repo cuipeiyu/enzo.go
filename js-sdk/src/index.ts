@@ -1,5 +1,10 @@
 import EventEmitter from 'eventemitter3';
 
+export declare interface Plugin {
+  readonly pluginName: string;
+  install: (a1: Enzo, a2: messageType) => void;
+}
+
 export declare interface Options {
   /** The server address e.g: ws://localhost */
   address: string;
@@ -10,17 +15,18 @@ export declare interface Options {
   alwaysReconnect?: boolean;
 }
 
-const defaults: Options = {
+export const defaults: Options = {
   address: '',
   autoConnect: true,
   alwaysReconnect: true,
 };
 
-enum messageType {
+export enum messageType {
   CloseMessage = 0x01,
 
   PingMessage = 0x14,
   PongMessage = 0x15,
+  PluginMessage = 0x16,
 
   PostMessage = 0x28,
   BackMessage = 0x29,
@@ -32,7 +38,7 @@ interface payload {
   /** long time operation ? */
   longtime: boolean;
   key?: string;
-  data?: any;
+  data?: Uint8Array;
 }
 
 export type Handle = (p: any) => void | Promise<void>;
@@ -60,7 +66,7 @@ export class Enzo {
 
   #reconnectDecay: number;
 
-  constructor(opt: Options) {
+  constructor(opt?: Options) {
     this.#connected = false;
     this.#forceClose = false;
 
@@ -196,7 +202,7 @@ export class Enzo {
       }
     }
 
-    if (msgType === messageType.PostMessage) {
+    if (msgType === messageType.PostMessage || msgType === messageType.PluginMessage) {
       this.waitMessageReturn(msgid, longtime ? 0 : 6000, callback);
     }
     this.#socket.send(buf);
@@ -297,13 +303,13 @@ export class Enzo {
         if (self.#socket) self.#socket.close(1000);
         self.#socket = new WebSocket(self.#opt.address, ['enzo-v0']);
 
+        self.#socket.binaryType = 'arraybuffer';
+
         self.#socket.onerror = function (e: Event) {
           reject(e);
 
           self.#ee.emit('ws_error', e);
         };
-
-        self.#socket.binaryType = 'blob';
 
         self.#socket.onopen = function () {
           setTimeout(() => {
@@ -393,9 +399,8 @@ export class Enzo {
 
     let offset = 0;
 
-    const _mt = e.data.slice(offset, (offset += 1));
-    const _mtView = new Uint8Array(_mt);
-    const mt = _mtView.at(0);
+    const _mt = new Uint8Array(e.data.slice(offset, (offset += 1)));
+    const mt = _mt.at(0);
 
     if (!mt || !(mt in messageType)) {
       this.#ee.emit('error', new Error('incomplete message, invalid messageType'));
@@ -459,8 +464,7 @@ export class Enzo {
     let bodyLength = _bodyLenView.getUint32(0, true);
 
     // data
-    let _data = new Uint8Array(e.data.slice(offset, (offset += bodyLength)));
-    res.data = buffer2string(_data);
+    res.data = new Uint8Array(e.data.slice(offset, (offset += bodyLength)));
 
     // get back
     if (res.messageType === messageType.BackMessage) {
@@ -541,6 +545,20 @@ export class Enzo {
     this.#clearHeartbeatTimer();
     this.#startHeartbeatTimer(immediate);
   }
+
+  /** install plugin */
+  use(...args: Plugin[]) {
+    for (let plugin of args) {
+      if (plugin.install) {
+        console.log('register plugin:', plugin.pluginName);
+        plugin.install(this, messageType.PluginMessage);
+      }
+    }
+  }
+
+  string2buffer: (a1: string) => Uint8Array;
+
+  buffer2string: (a1: Uint8Array) => string;
 }
 
 export class Context {
@@ -628,6 +646,14 @@ const bufid2string = (buf: Uint8Array) => buf.reduce((id, byte) => {
 }, '');
 
 export default { Enzo, Context };
+
+Object.defineProperty(Enzo.prototype, 'string2buffer', {
+  value: string2buffer,
+});
+
+Object.defineProperty(Enzo.prototype, 'buffer2string', {
+  value: buffer2string,
+});
 
 if (window) {
   Object.defineProperty(window, 'Enzo', {
