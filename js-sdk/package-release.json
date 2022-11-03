@@ -12,6 +12,10 @@
     ".": {
       "types": "./index.d.ts",
       "import": "./index.es.js"
+    },
+    "./plugins/sessions": {
+      "types": "./plugins/sessions/index.d.ts",
+      "import": "./plugins/sessions/index.es.js"
     }
   },
   "typesVersions": {

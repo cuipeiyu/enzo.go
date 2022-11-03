@@ -135,6 +135,7 @@ export class Enzo {
           try {
             dataBuf = string2buffer(JSON.stringify(data));
           } catch (err) {
+            callback(err as Error);
             return;
           }
         }
@@ -248,28 +249,28 @@ export class Enzo {
     });
   }
 
-  public emit(key: string, data: any, cb?: (res: Context) => void): Promise<any> {
+  public emit(key: string, data: any, cb?: (res: Context | Error) => void): Promise<Context> {
     const self = this;
     return new Promise((resolve, reject) => {
       self.write(messageType.PostMessage, false, (res: Context | Error) => {
+        setTimeout(() => { cb && cb(res); }, 0);
         if (res instanceof Error) {
           reject(res);
         } else {
-          if (cb) cb(res);
           resolve(res);
         }
       }, void 0, key, data);
     });
   }
 
-  public longtimeEmit(key: string, data: any, cb?: (res: Context) => void): Promise<any> {
+  public longtimeEmit(key: string, data: any, cb?: (res: Context | Error) => void): Promise<Context> {
     const self = this;
     return new Promise((resolve, reject) => {
       self.write(messageType.PostMessage, true, (res: Context | Error) => {
+        setTimeout(() => { cb && cb(res); }, 0);
         if (res instanceof Error) {
           reject(res);
         } else {
-          if (cb) cb(res);
           resolve(res);
         }
       }, void 0, key, data);
@@ -596,17 +597,17 @@ export class Context {
     return this.#payload.data;
   }
 
+  get emit() {
+    return this.#enzo.emit;
+  }
+
+  get longtimeEmit() {
+    return this.#enzo.longtimeEmit;
+  }
+
   public write(data: any) {
     this.#replied = true;
     this.#enzo.write(messageType.BackMessage, false, () => { }, this.#payload.messageId, this.#payload.key, data);
-  }
-
-  public emit(key: string, data: string, cb?: (res: any) => void): Promise<any> {
-    return this.#enzo.emit(key, data, cb);
-  }
-
-  public longtimeEmit(key: string, data: string, cb?: (res: any) => void): Promise<any> {
-    return this.#enzo.longtimeEmit(key, data, cb);
   }
 }
 
