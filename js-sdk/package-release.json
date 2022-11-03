@@ -35,7 +35,6 @@
   "license": "MIT",
   "dependencies": {
     "eventemitter3": "^4.0.7",
-    "minimatch": "^5.1.0",
-    "nanoid": "^4.0.0"
+    "minimatch": "^5.1.0"
   }
 }
