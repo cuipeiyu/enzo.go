@@ -18,7 +18,7 @@ func main() {
 		time.Sleep(2 * time.Second)
 
 		ctx.Emit("boom", []byte("some content"), func(ctx *enzogo.Context) {
-			log.Println("boom result", ctx.Data)
+			log.Println("boom result", ctx.GetData())
 
 			ctx.Write([]byte("ok"))
 		})

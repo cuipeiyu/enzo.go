@@ -1,6 +1,7 @@
 package enzogo
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/binary"
 	"log"
@@ -36,8 +37,9 @@ type Enzo struct {
 
 	emitter *Emitter
 
-	lock   sync.Mutex
-	events []listener
+	lock    sync.Mutex
+	events  []listener
+	plugins map[string]Plugin
 }
 
 func New() *Enzo {
@@ -51,6 +53,7 @@ func New() *Enzo {
 		emitter: newEmitter(),
 		lock:    sync.Mutex{},
 		events:  []listener{},
+		plugins: map[string]Plugin{},
 	}
 }
 
@@ -68,11 +71,15 @@ func (enzo *Enzo) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	rand.Read(connid)
 	id := bytes2BHex(connid)
 
+	request := r.Clone(context.Background())
+
+	enzo.emitter.Emit("connect", newContext(id, enzo, conn, request, payload{}))
+
 	for {
 		_, p, err := conn.ReadMessage()
 		if err != nil {
 			log.Println("read an error: ", err)
-			enzo.emitter.Emit("close", newContext(id, enzo, conn, payload{}))
+			enzo.emitter.Emit("disconnect", newContext(id, enzo, conn, request, payload{}))
 			return
 		}
 
@@ -124,7 +131,7 @@ func (enzo *Enzo) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			if offset == 16 && allLength == 0 {
 				//
 				if res.MsgType == BackMessage {
-					enzo.emitter.Emit(msgid, newContext(id, enzo, conn, res))
+					enzo.emitter.Emit(msgid, newContext(id, enzo, conn, request, res))
 					return
 				}
 				// ! unhandled
@@ -157,10 +164,10 @@ func (enzo *Enzo) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			offset += dataLength
 
 			if res.MsgType == BackMessage {
-				enzo.emitter.Emit(msgid, newContext(id, enzo, conn, res))
+				enzo.emitter.Emit(msgid, newContext(id, enzo, conn, request, res))
 				return
 			}
-			enzo.emitter.Emit(res.Key, newContext(id, enzo, conn, res))
+			enzo.emitter.Emit(res.Key, newContext(id, enzo, conn, request, res))
 		}(p)
 	}
 }
@@ -207,6 +214,7 @@ func (enzo *Enzo) Use(plugins ...Plugin) {
 	for _, p := range plugins {
 		log.Println("register plugin:", p.Name())
 		p.Install(enzo)
+		enzo.plugins[p.Name()] = p
 	}
 }
 

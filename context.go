@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"encoding/binary"
 	"log"
+	"net/http"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
 
-func newContext(id string, enzo *Enzo, conn *websocket.Conn, payload payload) *Context {
+func newContext(id string, enzo *Enzo, conn *websocket.Conn, req *http.Request, payload payload) *Context {
 	c := &Context{
 		id:      id,
 		enzo:    enzo,
@@ -35,17 +36,26 @@ func newContext(id string, enzo *Enzo, conn *websocket.Conn, payload payload) *C
 }
 
 type Context struct {
-	id   string
-	enzo *Enzo
-	Conn *websocket.Conn
-	payload
+	id      string
+	enzo    *Enzo
+	Conn    *websocket.Conn
+	req     *http.Request
+	payload payload
 	err     error
 	replied bool
 	timer   *time.Timer
 }
 
+func (ctx *Context) GetPlugin(name string) Plugin {
+	return ctx.enzo.plugins[name]
+}
+
 func (ctx *Context) GetId() string {
 	return ctx.id
+}
+
+func (ctx *Context) GetHttpRequest() *http.Request {
+	return ctx.req
 }
 
 func (ctx *Context) IsError() bool {

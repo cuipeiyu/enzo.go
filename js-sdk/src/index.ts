@@ -427,7 +427,7 @@ export class Enzo {
     let _allLenView = new DataView(_allLen, 0);
     let allLength = _allLenView.getUint32(0, true);
 
-    if (!allLength) {
+    if (!allLength || !(allLength - offset)) {
       if (res.messageType === messageType.PongMessage) {
         this.#ee.emit(msgid, new Context(this, res));
         return;
