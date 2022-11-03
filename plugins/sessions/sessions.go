@@ -3,11 +3,14 @@ package sessions
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"log"
 	"sync"
 
 	enzogo "github.com/cuipeiyu/enzo.go"
 )
+
+const pluginName = "sessions"
 
 type Storage interface {
 	Size() int64
@@ -28,13 +31,26 @@ func New(store func() Storage) *Sessions {
 	}
 }
 
+func Load(ctx *enzogo.Context) (Storage, error) {
+	p := ctx.GetPlugin(pluginName)
+	if p == nil {
+		return nil, errors.New("plugin \"" + pluginName + "\" not found")
+	}
+	t, ok := p.(*Sessions)
+	if !ok {
+		return nil, errors.New("plugin \"" + pluginName + "\" not a Sessions")
+	}
+	s := t.getStateMap(ctx)
+	return s, nil
+}
+
 type Sessions struct {
 	state    sync.Map
 	newStore func() Storage
 }
 
 func (s *Sessions) Name() string {
-	return "sessions"
+	return pluginName
 }
 
 func (s *Sessions) Install(enzo *enzogo.Enzo) {
@@ -46,7 +62,7 @@ func (s *Sessions) Install(enzo *enzogo.Enzo) {
 	enzo.On(name+"|sizes", s.onSizes)
 	enzo.On(name+"|clean", s.onClean)
 
-	enzo.On("close", s.remove)
+	enzo.On("disconnect", s.remove)
 }
 
 func (s *Sessions) onSet(ctx *enzogo.Context) {

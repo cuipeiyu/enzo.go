@@ -151,14 +151,14 @@ export class Sessions implements Plugin {
     return t;
   }
 
-  async getJSON(key: string, cb?: (a1: any|undefined) => void): Promise<any|undefined> {
+  async getJSON<T>(key: string, cb?: (a1: T|undefined) => void): Promise<T|undefined> {
     const str = await this.getString(key);
     if (str === void 0) {
       cb && cb(str);
       return str;
     }
 
-    let tmp;
+    let tmp: T|undefined;
     try {
       tmp = JSON.parse(str);
     } catch (err) {

@@ -18,6 +18,19 @@ func main() {
 		}),
 	)
 
+	enzo.On("connect", func(ctx *enzogo.Context) {
+		sess, err := sessions.Load(ctx)
+		if err != nil {
+			log.Println("can not get Sessions")
+			return
+		}
+
+		sess.Set("isok", []byte{0x01}, 0)
+
+		size := sess.Size()
+		log.Println("got session size:", size)
+	})
+
 	http.Handle("/", http.StripPrefix("/", http.FileServer(http.Dir("."))))
 	http.HandleFunc("/enzo.js", func(rw http.ResponseWriter, r *http.Request) {
 		http.ServeFile(rw, r, "../../js-sdk/dist/index.es.js")
