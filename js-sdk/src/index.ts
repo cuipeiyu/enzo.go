@@ -110,7 +110,7 @@ export class Enzo {
   // make message frame
   // * | base: (1+1+10=4=16) | messageType(1) | longtime(1) | messageId(10) | allLength(4) |
   // ? | data: (4+x+4+x=y)   | keyLength(4)   | key(x)      | dataLength(4) | dataBody(x)  |
-  write(msgType: messageType, longtime: boolean, callback: (e: Context | Error) => void, msgId?: Uint8Array, key?: string, data?: any) {
+  write(msgType: messageType, longtime: boolean, waitBack: boolean, callback: (e: Context | Error) => void, msgId?: Uint8Array, key?: string, data?: any) {
     if (!msgId) msgId = crypto.getRandomValues(new Uint8Array(10));
     const msgid = bufid2string(msgId);
 
@@ -203,19 +203,18 @@ export class Enzo {
       }
     }
 
-    if (msgType === messageType.PostMessage || msgType === messageType.PluginMessage) {
+    if (waitBack) {
       this.waitMessageReturn(msgid, longtime ? 0 : 6000, callback);
     }
     this.#socket.send(buf);
   }
 
   waitMessageReturn(msgid: string, timeout: number, callback: (e: Context | Error) => void) {
-    let replyid = msgid;
     let replied = false;
 
     // set timer
     if (timeout > 0) {
-      this.#timers[replyid] = window.setTimeout(() => {
+      this.#timers[msgid] = window.setTimeout(() => {
         // ! big problem, receipt not received
 
         // remove listener
@@ -230,12 +229,12 @@ export class Enzo {
         this.#doReconnect();
 
         // return an error
-        if (!replied) callback(new Error('timeout'));
+        if (!replied) callback.call(this, new Error('timeout'));
       }, timeout);
     }
 
     // waiting back
-    this.#ee.once(replyid, (res: Context | Error) => {
+    this.#ee.once(msgid, (res: Context | Error) => {
       replied = true;
 
       // remove timer
@@ -245,15 +244,15 @@ export class Enzo {
       }
 
       // success
-      callback(res);
+      callback.call(this, res);
     });
   }
 
   public emit(key: string, data: any, cb?: (res: Context | Error) => void): Promise<Context> {
     const self = this;
     return new Promise((resolve, reject) => {
-      self.write(messageType.PostMessage, false, (res: Context | Error) => {
-        setTimeout(() => { cb && cb(res); }, 0);
+      self.write(messageType.PostMessage, false, true, (res: Context | Error) => {
+        setTimeout(() => { cb && isFunc(cb) && cb.call(self, res); }, 0);
         if (res instanceof Error) {
           reject(res);
         } else {
@@ -266,8 +265,8 @@ export class Enzo {
   public longtimeEmit(key: string, data: any, cb?: (res: Context | Error) => void): Promise<Context> {
     const self = this;
     return new Promise((resolve, reject) => {
-      self.write(messageType.PostMessage, true, (res: Context | Error) => {
-        setTimeout(() => { cb && cb(res); }, 0);
+      self.write(messageType.PostMessage, true, true, (res: Context | Error) => {
+        setTimeout(() => { cb && isFunc(cb) && cb.call(self, res); }, 0);
         if (res instanceof Error) {
           reject(res);
         } else {
@@ -331,7 +330,7 @@ export class Enzo {
             };
 
             // test
-            self.write(messageType.PingMessage, false, (e: Context | Error) => {
+            self.write(messageType.PingMessage, false, true, (e: Context | Error) => {
               if (e instanceof Error) {
                 reject(e);
                 return;
@@ -521,17 +520,11 @@ export class Enzo {
     if (self.#heartbeatTimer) return;
 
     if (immediate) {
-      self.write(messageType.PingMessage, false, (e) => {
-        if (e instanceof Error) {
-        }
-      });
+      self.write(messageType.PingMessage, false, true, () => {});
     }
 
     self.#heartbeatTimer = window.setInterval(() => {
-      self.write(messageType.PingMessage, false, (e) => {
-        if (e instanceof Error) {
-        }
-      });
+      self.write(messageType.PingMessage, false, true, () => {});
     }, 15e3);
   }
 
@@ -584,7 +577,7 @@ export class Context {
         // reply default message
         this.#replied = true;
 
-        this.#enzo.write(messageType.BackMessage, false, () => { }, this.#payload.messageId, this.#payload.key, new Uint8Array(0));
+        this.#enzo.write(messageType.BackMessage, false, false, () => { }, this.#payload.messageId, this.#payload.key, new Uint8Array(0));
       }, 3000);
     }
   }
@@ -598,16 +591,16 @@ export class Context {
   }
 
   get emit() {
-    return this.#enzo.emit;
+    return this.#enzo.emit.bind(this);
   }
 
   get longtimeEmit() {
-    return this.#enzo.longtimeEmit;
+    return this.#enzo.longtimeEmit.bind(this);
   }
 
   public write(data: any) {
     this.#replied = true;
-    this.#enzo.write(messageType.BackMessage, false, () => { }, this.#payload.messageId, this.#payload.key, data);
+    this.#enzo.write(messageType.BackMessage, false, false, () => { }, this.#payload.messageId, this.#payload.key, data);
   }
 }
 
@@ -645,6 +638,8 @@ const bufid2string = (buf: Uint8Array) => buf.reduce((id, byte) => {
   }
   return id;
 }, '');
+
+const isFunc = (like: any): boolean => typeof like === 'boolean';
 
 export default { Enzo, Context };
 

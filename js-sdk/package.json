@@ -1,13 +1,19 @@
 {
   "name": "enzo.js",
-  "version": "0.0.0",
   "type": "module",
+  "version": "0.0.0",
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./plugins/sessions": "./src/plugins/sessions/index.ts"
+  },
   "scripts": {
     "build": "npm run lint && npm run typecheck && npm run build-only && cp package-release.json dist/package.json && cp ../README.md ../LICENSE dist/",
     "build-only": "npm run build:core && npm run build:plugin:sessions && npm run build:ts",
     "build:core": "BUILD=core vite build",
     "build:plugin:sessions": "BUILD=plugin:sessions vite build",
-    "build:ts": "tsc -d && rm -rf dist/index.js && rm -rf dist/plugins/sessions/index.js",
+    "build:ts": "tsc -d --emitDeclarationOnly",
     "dev": "vite",
     "lint": "eslint .",
     "release": "bumpp && npm publish",
@@ -27,6 +33,6 @@
     "eslint-config-airbnb-base": "^14.2.1",
     "eslint-plugin-import": "^2.25.2",
     "typescript": "^4.8.4",
-    "vite": "^2.6.3"
+    "vite": "^3.2.2"
   }
 }

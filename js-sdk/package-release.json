@@ -1,28 +1,23 @@
 {
   "name": "enzo.js",
   "type": "module",
-  "version": "x.x.x",
+  "version": "0.0.0",
   "description": "a enzo.go js SDK",
   "main": "./index.es.js",
-  "module": "./index.es.ts",
+  "module": "./index.es.js",
   "unpkg": "./index.umd.js",
   "jsdelivr": "./index.umd.js",
   "types": "./index.d.ts",
   "exports": {
-    ".": {
-      "types": "./index.d.ts",
-      "import": "./index.es.js"
-    },
-    "./plugins/sessions": {
-      "types": "./plugins/sessions/index.d.ts",
-      "import": "./plugins/sessions/index.es.js"
-    }
+    ".": "./index.es.js",
+    "./plugins/sessions": "./plugins/sessions/index.es.js"
   },
   "typesVersions": {
     "*": {
       "*": [
         "./*",
-        "./index.d.ts"
+        "./index.d.ts",
+        "./plugins/sessions/index.d.ts"
       ]
     }
   },

@@ -1,6 +1,6 @@
 import { resolve } from 'path';
 import { defineConfig, LibraryOptions } from 'vite';
-import { InputOption, OutputOptions } from 'rollup';
+import { InputOption } from 'rollup';
 
 type LibTypes = 'core' | 'plugin:sessions';
 
@@ -39,24 +39,21 @@ export default defineConfig({
       '@/': new URL('./src/', import.meta.url).pathname,
     },
   },
+  esbuild: {
+    drop: ['console', 'debugger'],
+  },
   build: {
     emptyOutDir: build === 'core',
     target: 'esnext',
     lib: makelib(),
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: true,
-        drop_debugger: true,
-      },
-    },
+    minify: 'esbuild',
     rollupOptions: {
       // make sure to externalize deps that shouldn't be bundled
       // into your library
       external: [],
       input: makeinput(),
       output: {
-        // ...makeoutput(),
+        dir: 'dist',
         exports: 'named',
         // Provide global variables to use in the UMD build
         // for externalized deps

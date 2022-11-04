@@ -83,7 +83,7 @@ export class Sessions implements Plugin {
       buf.set(keyBuf, offset);
       offset += keyBuf.byteLength;
 
-      this.#enzo.write(this.#messageType, false, (e: Context | Error) => {
+      this.#enzo.write(this.#messageType, false, true, (e: Context | Error) => {
         if (e instanceof Error) {
           reject(e);
         } else if (e.data) {
@@ -214,7 +214,7 @@ export class Sessions implements Plugin {
       // data
       buf.set(data, offset);
 
-      this.#enzo.write(this.#messageType, false, (e: Context | Error) => {
+      this.#enzo.write(this.#messageType, false, true, (e: Context | Error) => {
         if (e instanceof Error) {
           reject(e);
         } else if (e.data) {
@@ -300,7 +300,7 @@ export class Sessions implements Plugin {
       buf.set(keyBuf, offset);
       offset += keyBuf.byteLength;
 
-      this.#enzo.write(this.#messageType, false, (e: Context | Error) => {
+      this.#enzo.write(this.#messageType, false, true, (e: Context | Error) => {
         if (e instanceof Error) {
           reject(e);
         } else if (e.data) {
@@ -324,7 +324,7 @@ export class Sessions implements Plugin {
 
   sizes(cb?: (a1: number) => void): Promise<number> {
     return new Promise((resolve, reject) => {
-      this.#enzo.write(this.#messageType, false, (e: Context | Error) => {
+      this.#enzo.write(this.#messageType, false, true, (e: Context | Error) => {
         if (e instanceof Error) {
           reject(e);
         } else if (e.data) {
@@ -354,7 +354,7 @@ export class Sessions implements Plugin {
 
   clean(cb?: () => void): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.#enzo.write(this.#messageType, false, (e: Context | Error) => {
+      this.#enzo.write(this.#messageType, false, true, (e: Context | Error) => {
         if (e instanceof Error) {
           reject(e);
         } else {
