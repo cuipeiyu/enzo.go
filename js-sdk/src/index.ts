@@ -124,16 +124,16 @@ export class Enzo {
     let dataBuf: Uint8Array | undefined;
 
     if (key) {
-      keyBuf = string2buffer(key);
+      keyBuf = this.string2buffer(key);
 
       if (data) {
         if (data instanceof Uint8Array) {
           dataBuf = data;
         } else if (typeof data === 'string') {
-          dataBuf = string2buffer(data);
+          dataBuf = this.string2buffer(data);
         } else {
           try {
-            dataBuf = string2buffer(JSON.stringify(data));
+            dataBuf = this.string2buffer(JSON.stringify(data));
           } catch (err) {
             callback(err as Error);
             return;
@@ -456,7 +456,7 @@ export class Enzo {
 
     // key
     let _key = new Uint8Array(e.data.slice(offset, (offset += keyLength)));
-    res.key = buffer2string(_key);
+    res.key = this.buffer2string(_key);
 
     // bodylen
     let _bodylen = e.data.slice(offset, (offset += 4));
@@ -550,9 +550,13 @@ export class Enzo {
     }
   }
 
-  string2buffer: (a1: string) => Uint8Array;
+  string2buffer(str: string): Uint8Array {
+    return new TextEncoder().encode(str);
+  }
 
-  buffer2string: (a1: Uint8Array) => string;
+  buffer2string(buf: Uint8Array): string {
+    return new TextDecoder('utf-8').decode(buf);
+  }
 }
 
 export class Context {
@@ -604,10 +608,6 @@ export class Context {
   }
 }
 
-const string2buffer = (str: string): Uint8Array => new TextEncoder().encode(str);
-
-const buffer2string = (buf: Uint8Array): string => new TextDecoder('utf-8').decode(buf);
-
 // const mergeBuffer = (...args: Uint8Array[]): Uint8Array => {
 //   // sum of individual array lengths
 //   let len = 0;
@@ -642,14 +642,6 @@ const bufid2string = (buf: Uint8Array) => buf.reduce((id, byte) => {
 const isFunc = (like: any): boolean => typeof like === 'boolean';
 
 export default { Enzo, Context };
-
-Object.defineProperty(Enzo.prototype, 'string2buffer', {
-  value: string2buffer,
-});
-
-Object.defineProperty(Enzo.prototype, 'buffer2string', {
-  value: buffer2string,
-});
 
 if (window) {
   Object.defineProperty(window, 'Enzo', {
