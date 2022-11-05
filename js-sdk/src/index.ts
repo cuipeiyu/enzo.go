@@ -229,7 +229,7 @@ export class Enzo {
         this.#doReconnect();
 
         // return an error
-        if (!replied) callback.call(this, new Error('timeout'));
+        if (!replied) callback(new Error('timeout'));
       }, timeout);
     }
 
@@ -244,7 +244,7 @@ export class Enzo {
       }
 
       // success
-      callback.call(this, res);
+      callback(res);
     });
   }
 
