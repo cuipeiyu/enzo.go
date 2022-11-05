@@ -252,7 +252,7 @@ export class Enzo {
     const self = this;
     return new Promise((resolve, reject) => {
       self.write(messageType.PostMessage, false, true, (res: Context | Error) => {
-        setTimeout(() => { cb && isFunc(cb) && cb.call(self, res); }, 0);
+        setTimeout(() => { cb && isFunc(cb) && cb(res); }, 0);
         if (res instanceof Error) {
           reject(res);
         } else {
@@ -266,7 +266,7 @@ export class Enzo {
     const self = this;
     return new Promise((resolve, reject) => {
       self.write(messageType.PostMessage, true, true, (res: Context | Error) => {
-        setTimeout(() => { cb && isFunc(cb) && cb.call(self, res); }, 0);
+        setTimeout(() => { cb && isFunc(cb) && cb(res); }, 0);
         if (res instanceof Error) {
           reject(res);
         } else {
