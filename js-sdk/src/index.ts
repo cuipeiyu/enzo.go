@@ -210,41 +210,42 @@ export class Enzo {
   }
 
   waitMessageReturn(msgid: string, timeout: number, callback: (e: Context | Error) => void) {
+    const self = this;
     let replied = false;
 
     // set timer
     if (timeout > 0) {
-      this.#timers[msgid] = window.setTimeout(() => {
+      self.#timers[msgid] = window.setTimeout(() => {
         // ! big problem, receipt not received
 
         // remove listener
-        this.#ee.removeListener(msgid);
+        self.#ee.removeListener(msgid);
 
         // remove timer
-        if (msgid in this.#timers) {
-          clearTimeout(this.#timers[msgid]);
+        if (msgid in self.#timers) {
+          clearTimeout(self.#timers[msgid]);
           delete this.#timers[msgid];
         }
 
-        this.#doReconnect();
+        self.#doReconnect();
 
         // return an error
-        if (!replied) callback(new Error('timeout'));
+        if (!replied) callback.call(self, new Error('timeout'));
       }, timeout);
     }
 
     // waiting back
-    this.#ee.once(msgid, (res: Context | Error) => {
+    self.#ee.once(msgid, (res: Context | Error) => {
       replied = true;
 
       // remove timer
-      if (msgid in this.#timers) {
-        clearTimeout(this.#timers[msgid]);
-        delete this.#timers[msgid];
+      if (msgid in self.#timers) {
+        clearTimeout(self.#timers[msgid]);
+        delete self.#timers[msgid];
       }
 
       // success
-      callback(res);
+      callback.call(self, res);
     });
   }
 
@@ -573,7 +574,7 @@ export class Context {
     this.#payload = payload;
     this.#replied = false;
 
-    if (this.#payload.messageType === messageType.PostMessage && !payload.longtime) {
+    if ((this.#payload.messageType === messageType.PostMessage || this.#payload.messageType === messageType.PluginMessage) && !payload.longtime) {
       this.#replyTimer = window.setTimeout(() => {
         clearTimeout(this.#replyTimer);
         if (this.#replied) return;
@@ -639,7 +640,7 @@ const bufid2string = (buf: Uint8Array) => buf.reduce((id, byte) => {
   return id;
 }, '');
 
-const isFunc = (like: any): boolean => typeof like === 'boolean';
+const isFunc = (like: any): boolean => typeof like === 'function';
 
 export default { Enzo, Context };
 
