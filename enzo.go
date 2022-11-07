@@ -37,9 +37,10 @@ type Enzo struct {
 
 	emitter *Emitter
 
-	lock    sync.Mutex
-	events  []listener
-	plugins map[string]Plugin
+	lock           sync.Mutex
+	events         []listener
+	plugins        map[string]Plugin
+	GenerateConnid func(r *http.Request) string
 }
 
 func New() *Enzo {
@@ -50,11 +51,19 @@ func New() *Enzo {
 			WriteBufferSize: 1024,
 			Subprotocols:    []string{"enzo-v0"},
 		},
-		emitter: newEmitter(),
-		lock:    sync.Mutex{},
-		events:  []listener{},
-		plugins: map[string]Plugin{},
+		emitter:        newEmitter(),
+		lock:           sync.Mutex{},
+		events:         []listener{},
+		plugins:        map[string]Plugin{},
+		GenerateConnid: DefaultGenerateConnid,
 	}
+}
+
+func DefaultGenerateConnid(r *http.Request) string {
+	connid := make([]byte, 10)
+	rand.Read(connid)
+	id := bytes2BHex(connid)
+	return id
 }
 
 var _ http.Handler = (*Enzo)(nil)
@@ -67,9 +76,7 @@ func (enzo *Enzo) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	// generate an id
-	connid := make([]byte, 10)
-	rand.Read(connid)
-	id := bytes2BHex(connid)
+	id := enzo.GenerateConnid(r)
 
 	request := r.Clone(context.Background())
 

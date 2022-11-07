@@ -50,7 +50,7 @@ func (ctx *Context) GetPlugin(name string) Plugin {
 	return ctx.enzo.plugins[name]
 }
 
-func (ctx *Context) GetId() string {
+func (ctx *Context) GetConnid() string {
 	return ctx.id
 }
 
