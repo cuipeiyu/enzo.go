@@ -178,13 +178,13 @@ func (s *Sessions) onClean(ctx *enzogo.Context) {
 }
 
 func (s *Sessions) getStateMap(ctx *enzogo.Context) Storage {
-	connid := ctx.GetId()
+	connid := ctx.GetConnid()
 	m, _ := s.state.LoadOrStore(connid, s.newStore())
 	return m.(Storage)
 }
 
 func (s *Sessions) remove(ctx *enzogo.Context) {
-	connid := ctx.GetId()
+	connid := ctx.GetConnid()
 	s.state.Delete(connid)
 }
 
