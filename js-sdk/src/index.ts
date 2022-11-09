@@ -485,17 +485,13 @@ export class Enzo {
     self.#setConnected(false, true);
     self.#clearHeartbeatTimer();
 
-    if (self.#forceClose) {
-      self.#ee.emit('close');
-      return;
-    }
-
     // set reconnect
     this.#doReconnect();
   }
 
   #doReconnect() {
     if (this.#opt.alwaysReconnect !== true) return;
+    if (this.#forceClose) return;
 
     this.#reconnect = true;
 
