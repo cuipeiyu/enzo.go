@@ -103,7 +103,9 @@ func (enzo *Enzo) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			}
 			if body[0] == PingMessage {
 				body[0] = PongMessage
+				enzo.lock.Lock()
 				conn.WriteMessage(websocket.BinaryMessage, body)
+				enzo.lock.Unlock()
 				enzo.emitter.Emit("ping")
 				return
 			}

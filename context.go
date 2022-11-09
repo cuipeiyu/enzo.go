@@ -93,12 +93,14 @@ func (ctx *Context) write(msgType byte, longtime bool, msgid []byte, key string,
 	}
 
 	if msgType == PongMessage {
+		ctx.enzo.lock.Lock()
 		ctx.Conn.WriteMessage(websocket.BinaryMessage,
 			append(
 				append([]byte{msgType, 0}, msgid...),
 				[]byte{0, 0, 0, 0}...,
 			),
 		)
+		ctx.enzo.lock.Unlock()
 		return
 	}
 
@@ -164,7 +166,9 @@ func (ctx *Context) write(msgType byte, longtime bool, msgid []byte, key string,
 		})
 	}
 
+	ctx.enzo.lock.Lock()
 	err := ctx.Conn.WriteMessage(websocket.BinaryMessage, buf.Bytes())
+	ctx.enzo.lock.Unlock()
 	if err != nil {
 		log.Println("write message error:", err)
 		ictx := &Context{
