@@ -478,10 +478,8 @@ export class Enzo {
   }
 
   #wsclose(_e: CloseEvent) {
-    const self = this;
-
-    self.#setConnected(false, true);
-    self.#clearHeartbeatTimer();
+    this.#setConnected(false, true);
+    this.#clearHeartbeatTimer();
 
     for (const msgid in this.#timers) {
       clearTimeout(this.#timers[msgid]);
