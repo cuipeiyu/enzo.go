@@ -350,8 +350,6 @@ export class Enzo {
   public async disconnect() {
     this.#forceClose = true;
 
-    this.#clearHeartbeatTimer();
-
     // Close code https://www.rfc-editor.org/rfc/rfc6455.html#section-7.1.5
     this.#socket.close(1000);
   }
@@ -484,6 +482,11 @@ export class Enzo {
 
     self.#setConnected(false, true);
     self.#clearHeartbeatTimer();
+
+    for (const msgid in this.#timers) {
+      clearTimeout(this.#timers[msgid]);
+      delete this.#timers[msgid];
+    }
 
     // set reconnect
     this.#doReconnect();
