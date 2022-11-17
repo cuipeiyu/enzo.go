@@ -91,6 +91,10 @@ func (ctx *Context) Write(data []byte) {
 // * | base: (1+1+10=4=16) | messageType(1) | longtime(1) | messageId(10) | allLength(4) |
 // ? | data: (4+x+4+x=y)   | keyLength(4)   | key(x)      | dataLength(4) | dataBody(x)  |
 func (ctx *Context) write(msgType byte, longtime bool, msgid []byte, key string, data []byte, callback Handle) {
+	if ctx.Conn == nil {
+		return
+	}
+
 	if msgid == nil {
 		msgid = makeMsgId()
 	}
