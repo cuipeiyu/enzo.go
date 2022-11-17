@@ -79,14 +79,18 @@ func (enzo *Enzo) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	id := enzo.GenerateConnid(r)
 
 	request := r.Clone(context.Background())
+	writeLock := new(sync.Mutex)
+	defer func() {
+		writeLock = nil
+	}()
 
-	enzo.emitter.Emit("connect", newContext(id, enzo, conn, request, payload{}))
+	enzo.emitter.Emit("connect", newContext(id, enzo, conn, request, writeLock, payload{}))
+	defer enzo.emitter.Emit("disconnect", newContext(id, enzo, nil, request, writeLock, payload{}))
 
 	for {
 		_, p, err := conn.ReadMessage()
 		if err != nil {
 			log.Println("read an error: ", err)
-			enzo.emitter.Emit("disconnect", newContext(id, enzo, conn, request, payload{}))
 			return
 		}
 
@@ -103,9 +107,9 @@ func (enzo *Enzo) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			}
 			if body[0] == PingMessage {
 				body[0] = PongMessage
-				enzo.lock.Lock()
+				writeLock.Lock()
 				conn.WriteMessage(websocket.BinaryMessage, body)
-				enzo.lock.Unlock()
+				writeLock.Unlock()
 				enzo.emitter.Emit("ping")
 				return
 			}
@@ -140,7 +144,7 @@ func (enzo *Enzo) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			if offset == 16 && allLength == 0 {
 				//
 				if res.MsgType == BackMessage {
-					enzo.emitter.Emit(msgid, newContext(id, enzo, conn, request, res))
+					enzo.emitter.Emit(msgid, newContext(id, enzo, conn, request, writeLock, res))
 					return
 				}
 				// ! unhandled
@@ -173,10 +177,10 @@ func (enzo *Enzo) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			offset += dataLength
 
 			if res.MsgType == BackMessage {
-				enzo.emitter.Emit(msgid, newContext(id, enzo, conn, request, res))
+				enzo.emitter.Emit(msgid, newContext(id, enzo, conn, request, writeLock, res))
 				return
 			}
-			enzo.emitter.Emit(res.Key, newContext(id, enzo, conn, request, res))
+			enzo.emitter.Emit(res.Key, newContext(id, enzo, conn, request, writeLock, res))
 		}(p)
 	}
 }

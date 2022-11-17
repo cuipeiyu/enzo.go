@@ -5,18 +5,20 @@ import (
 	"encoding/binary"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
 
-func newContext(id string, enzo *Enzo, conn *websocket.Conn, req *http.Request, payload payload) *Context {
+func newContext(id string, enzo *Enzo, conn *websocket.Conn, req *http.Request, writeLock *sync.Mutex, payload payload) *Context {
 	c := &Context{
-		id:      id,
-		enzo:    enzo,
-		Conn:    conn,
-		payload: payload,
-		replied: false,
+		id:        id,
+		enzo:      enzo,
+		Conn:      conn,
+		writeLock: writeLock,
+		payload:   payload,
+		replied:   false,
 	}
 
 	if !payload.Longtime {
@@ -36,14 +38,15 @@ func newContext(id string, enzo *Enzo, conn *websocket.Conn, req *http.Request, 
 }
 
 type Context struct {
-	id      string
-	enzo    *Enzo
-	Conn    *websocket.Conn
-	req     *http.Request
-	payload payload
-	err     error
-	replied bool
-	timer   *time.Timer
+	id        string
+	enzo      *Enzo
+	Conn      *websocket.Conn
+	req       *http.Request
+	writeLock *sync.Mutex
+	payload   payload
+	err       error
+	replied   bool
+	timer     *time.Timer
 }
 
 func (ctx *Context) GetPlugin(name string) Plugin {
@@ -93,14 +96,14 @@ func (ctx *Context) write(msgType byte, longtime bool, msgid []byte, key string,
 	}
 
 	if msgType == PongMessage {
-		ctx.enzo.lock.Lock()
+		ctx.writeLock.Lock()
 		ctx.Conn.WriteMessage(websocket.BinaryMessage,
 			append(
 				append([]byte{msgType, 0}, msgid...),
 				[]byte{0, 0, 0, 0}...,
 			),
 		)
-		ctx.enzo.lock.Unlock()
+		ctx.writeLock.Unlock()
 		return
 	}
 
@@ -166,17 +169,18 @@ func (ctx *Context) write(msgType byte, longtime bool, msgid []byte, key string,
 		})
 	}
 
-	ctx.enzo.lock.Lock()
+	ctx.writeLock.Lock()
 	err := ctx.Conn.WriteMessage(websocket.BinaryMessage, buf.Bytes())
-	ctx.enzo.lock.Unlock()
+	ctx.writeLock.Unlock()
 	if err != nil {
 		log.Println("write message error:", err)
 		ictx := &Context{
-			id:      ctx.id,
-			enzo:    ctx.enzo,
-			Conn:    ctx.Conn,
-			payload: payload{},
-			err:     err,
+			id:        ctx.id,
+			enzo:      ctx.enzo,
+			Conn:      ctx.Conn,
+			writeLock: ctx.writeLock,
+			payload:   payload{},
+			err:       err,
 		}
 		callback(ictx)
 		return
