@@ -21,7 +21,7 @@ func newContext(id string, enzo *Enzo, conn *websocket.Conn, req *http.Request, 
 		replied:   false,
 	}
 
-	if !payload.Longtime {
+	if conn != nil && !payload.Longtime {
 		c.timer = time.AfterFunc(3*time.Second, func() {
 			if c.replied {
 				return

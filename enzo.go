@@ -84,8 +84,20 @@ func (enzo *Enzo) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		writeLock = nil
 	}()
 
-	enzo.emitter.Emit("connect", newContext(id, enzo, conn, request, writeLock, payload{}))
-	defer enzo.emitter.Emit("disconnect", newContext(id, enzo, nil, request, writeLock, payload{}))
+	enzo.emitter.Emit("connect", &Context{
+		id:        id,
+		enzo:      enzo,
+		Conn:      conn,
+		writeLock: writeLock,
+		req:       request,
+	})
+	defer enzo.emitter.Emit("disconnect", &Context{
+		id:        id,
+		enzo:      enzo,
+		Conn:      nil,
+		writeLock: writeLock,
+		req:       request,
+	})
 
 	for {
 		_, p, err := conn.ReadMessage()
